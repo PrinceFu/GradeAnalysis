@@ -64,7 +64,7 @@ def list_students(class_id: int = None, db: Session = Depends(get_db)):
 
 @router.get("/{student_id}")
 def get_student(student_id: int, db: Session = Depends(get_db)):
-    s = db.query(Student).get(student_id)
+    s = db.get(Student, student_id)
     if not s:
         raise HTTPException(status_code=404, detail="学生不存在")
     return {
@@ -92,7 +92,7 @@ def create_student(data: StudentCreate, db: Session = Depends(get_db)):
 
 @router.delete("/{student_id}")
 def delete_student(student_id: int, db: Session = Depends(get_db)):
-    stu = db.query(Student).get(student_id)
+    stu = db.get(Student, student_id)
     if not stu:
         raise HTTPException(status_code=404, detail="学生不存在")
     db.delete(stu)

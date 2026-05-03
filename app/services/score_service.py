@@ -66,7 +66,7 @@ def get_student_total_score(db: Session, student_id: int, exam_id: int) -> dict 
     计算某学生某次考试的总分（3+1+2）
     返回 {"student_id", "scores": {subject: score}, "total"}
     """
-    student = db.query(Student).get(student_id)
+    student = db.get(Student, student_id)
     if not student:
         return None
 

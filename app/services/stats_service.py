@@ -17,7 +17,7 @@ def subject_stats(db: Session, exam_subject_id: int) -> dict:
     if not scores:
         return {}
 
-    exam_subject = db.query(ExamSubject).get(exam_subject_id)
+    exam_subject = db.get(ExamSubject, exam_subject_id)
     full_score = exam_subject.full_score
 
     # 对赋分科目用 converted_score，其他用 raw_score
@@ -50,7 +50,7 @@ def score_distribution(db: Session, exam_subject_id: int, step: int = 10) -> dic
     if not scores:
         return {"labels": [], "counts": []}
 
-    exam_subject = db.query(ExamSubject).get(exam_subject_id)
+    exam_subject = db.get(ExamSubject, exam_subject_id)
     full_score = exam_subject.full_score
 
     values = []
@@ -143,7 +143,7 @@ def class_comparison(db: Session, exam_id: int) -> list[dict]:
 
 def student_trend(db: Session, student_id: int) -> list[dict]:
     """学生个人趋势：多次考试各科成绩和总分变化"""
-    student = db.query(Student).get(student_id)
+    student = db.get(Student, student_id)
     if not student:
         return []
 

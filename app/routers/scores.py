@@ -61,7 +61,7 @@ def enter_batch_scores(data: BatchScoreEntry, db: Session = Depends(get_db)):
 @router.post("/convert/{exam_subject_id}")
 def do_conversion(exam_subject_id: int, db: Session = Depends(get_db)):
     """触发单科等级赋分"""
-    es = db.query(ExamSubject).get(exam_subject_id)
+    es = db.get(ExamSubject, exam_subject_id)
     if not es:
         raise HTTPException(status_code=404, detail="考试科目不存在")
     if not es.needs_conversion:

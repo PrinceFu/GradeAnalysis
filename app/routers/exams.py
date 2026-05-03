@@ -45,7 +45,7 @@ def list_exams(db: Session = Depends(get_db)):
 
 @router.get("/{exam_id}")
 def get_exam(exam_id: int, db: Session = Depends(get_db)):
-    exam = db.query(Exam).get(exam_id)
+    exam = db.get(Exam, exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="考试不存在")
     return {
@@ -88,7 +88,7 @@ def create_exam(data: ExamCreate, db: Session = Depends(get_db)):
 
 @router.delete("/{exam_id}")
 def delete_exam(exam_id: int, db: Session = Depends(get_db)):
-    exam = db.query(Exam).get(exam_id)
+    exam = db.get(Exam, exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="考试不存在")
     db.delete(exam)
