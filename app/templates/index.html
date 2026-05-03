@@ -1,52 +1,66 @@
 {% extends "base.html" %}
 {% block title %}仪表盘 - 成绩分析系统{% endblock %}
-{% block page_title %}仪表盘{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">仪表盘</li>{% endblock %}
 
 {% block content %}
-<div class="row g-3 mb-4" id="stats-cards">
+<div class="row g-3 mb-4">
     <div class="col-md-3">
-        <div class="card stat-card p-3">
-            <div class="stat-label">学生总数</div>
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(74,144,217,0.1);color:#4A90D9;"><i class="bi bi-people"></i></div>
             <div class="stat-value" id="stat-students">-</div>
+            <div class="stat-label">学生总数</div>
+            <div class="stat-trend" id="stat-classes-info">-</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card stat-card p-3">
-            <div class="stat-label">班级数量</div>
-            <div class="stat-value" id="stat-classes">-</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card stat-card p-3">
-            <div class="stat-label">考试次数</div>
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(103,194,58,0.1);color:#67C23A;"><i class="bi bi-journal-text"></i></div>
             <div class="stat-value" id="stat-exams">-</div>
+            <div class="stat-label">考试次数</div>
+            <div class="stat-trend" id="stat-latest-info">-</div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card stat-card p-3">
-            <div class="stat-label">最近考试</div>
-            <div class="stat-value" id="stat-latest" style="font-size:16px;">-</div>
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(230,162,60,0.1);color:#E6A23C;"><i class="bi bi-award"></i></div>
+            <div class="stat-value" id="stat-avg-score">-</div>
+            <div class="stat-label">最新考试平均分</div>
+            <div class="stat-trend" id="stat-score-range">-</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(245,108,108,0.1);color:#F56C6C;"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-value" id="stat-pass-rate">-</div>
+            <div class="stat-label">最新考试及格率</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bullseye me-2"></i>学科平均分雷达图</div>
+            <div class="card-body"><div id="chart-radar" style="height:320px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bar-chart me-2"></i>班级总分对比</div>
+            <div class="card-body"><div id="chart-class-bar" style="height:320px;"></div></div>
         </div>
     </div>
 </div>
 
 <div class="row g-3">
-    <div class="col-md-6">
+    <div class="col-12">
         <div class="card">
-            <div class="card-header">快速操作</div>
-            <div class="card-body">
-                <a href="/students" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-person-plus"></i> 管理学生</a>
-                <a href="/exams" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-journal-plus"></i> 管理考试</a>
-                <a href="/scores/entry" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-pencil-square"></i> 录入成绩</a>
-                <a href="/analysis/grade" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-bar-chart"></i> 年级分析</a>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">选科分布</div>
-            <div class="card-body">
-                <div id="chart-subject-dist" style="height: 250px;"></div>
+            <div class="card-header"><i class="bi bi-lightning me-2"></i>快速操作</div>
+            <div class="card-body d-flex flex-wrap gap-2">
+                <a href="/scores/entry" class="btn btn-primary"><i class="bi bi-pencil-square me-1"></i> 成绩录入</a>
+                <a href="/students" class="btn btn-outline-primary"><i class="bi bi-people me-1"></i> 学生管理</a>
+                <a href="/exams" class="btn btn-outline-primary"><i class="bi bi-journal-plus me-1"></i> 考试管理</a>
+                <a href="/analysis/grade" class="btn btn-outline-primary"><i class="bi bi-bar-chart me-1"></i> 年级分析</a>
             </div>
         </div>
     </div>
@@ -57,34 +71,62 @@
 <script>
 async function loadDashboard() {
     try {
-        const [students, classes, exams] = await Promise.all([
-            fetch('/api/students/').then(r => r.json()),
-            fetch('/api/students/classes').then(r => r.json()),
-            fetch('/api/exams/').then(r => r.json()),
+        const [studentsData, classes, examsData] = await Promise.all([
+            apiFetch('/api/students/'), apiFetch('/api/students/classes'), apiFetch('/api/exams/'),
         ]);
-        document.getElementById('stat-students').textContent = students.length;
-        document.getElementById('stat-classes').textContent = classes.length;
-        document.getElementById('stat-exams').textContent = exams.length;
-        document.getElementById('stat-latest').textContent = exams.length > 0 ? exams[0].name : '暂无';
+        const students = Array.isArray(studentsData) ? studentsData : (studentsData.items || []);
+        const exams = Array.isArray(examsData) ? examsData : (examsData.items || []);
 
-        // 选科分布饼图
-        if (students.length > 0) {
-            const prefCount = {};
-            students.forEach(s => { prefCount[s.preferred_subject] = (prefCount[s.preferred_subject] || 0) + 1; });
-            const chart = echarts.init(document.getElementById('chart-subject-dist'));
-            chart.setOption({
-                tooltip: { trigger: 'item' },
-                series: [{
-                    type: 'pie', radius: ['40%', '70%'],
-                    data: Object.entries(prefCount).map(([k, v]) => ({ name: k, value: v })),
-                    label: { formatter: '{b}: {c}人 ({d}%)' }
-                }]
-            });
+        document.getElementById('stat-students').textContent = students.length;
+        document.getElementById('stat-classes-info').textContent = classes.length + ' 个班级';
+        document.getElementById('stat-exams').textContent = exams.length;
+        if (exams.length > 0) {
+            document.getElementById('stat-latest-info').textContent = '最近: ' + exams[0].name;
+            loadLatestExamStats(exams[0].id);
+        } else {
+            document.getElementById('stat-latest-info').textContent = '暂无考试';
         }
-    } catch (e) {
-        console.error('加载仪表盘失败:', e);
-    }
+    } catch (e) { showToast('加载仪表盘失败: ' + e.message, 'error'); }
 }
+
+async function loadLatestExamStats(examId) {
+    try {
+        const [gradeData, classData] = await Promise.all([
+            apiFetch('/api/analysis/grade/' + examId), apiFetch('/api/analysis/class-comparison/' + examId),
+        ]);
+        if (gradeData.total && gradeData.total.average) {
+            document.getElementById('stat-avg-score').textContent = gradeData.total.average;
+            document.getElementById('stat-score-range').textContent = '最高 ' + gradeData.total.max + ' / 最低 ' + gradeData.total.min;
+        }
+        if (gradeData.subjects && gradeData.subjects['语文']) {
+            document.getElementById('stat-pass-rate').textContent = gradeData.subjects['语文'].pass_rate + '%';
+        }
+        if (gradeData.subjects) renderRadar(gradeData.subjects);
+        if (classData && classData.length > 0) renderClassBar(classData);
+    } catch (e) { showToast('加载考试统计失败: ' + e.message, 'error'); }
+}
+
+function renderRadar(subjects) {
+    const chart = echarts.init(document.getElementById('chart-radar'));
+    const names = Object.keys(subjects).filter(s => s !== '物理' && s !== '历史');
+    chart.setOption({
+        tooltip: {}, radar: { indicator: names.map((n,i) => ({name:n,max:subjects[n].full_score})), radius:'65%' },
+        series: [{ type:'radar', data:[{value:names.map(n=>subjects[n].average),name:'平均分',areaStyle:{opacity:0.15},lineStyle:{color:'#4A90D9'},itemStyle:{color:'#4A90D9'}}] }],
+    });
+}
+
+function renderClassBar(classData) {
+    const chart = echarts.init(document.getElementById('chart-class-bar'));
+    const classNames = classData.map(c => c.class_name);
+    const subjects = Object.keys(classData[0].subjects || {});
+    chart.setOption({
+        tooltip:{trigger:'axis'}, legend:{data:subjects,bottom:0,type:'scroll'},
+        grid:{left:50,right:20,top:20,bottom:50},
+        xAxis:{type:'category',data:classNames}, yAxis:{type:'value'},
+        series: subjects.map((s,i) => ({name:s,type:'bar',data:classData.map(c=>c.subjects[s]||0),itemStyle:{color:COLORS[i%COLORS.length]}})),
+    });
+}
+
 loadDashboard();
 </script>
 {% endblock %}

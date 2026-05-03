@@ -1,13 +1,17 @@
 {% extends "base.html" %}
 {% block title %}年级分析{% endblock %}
-{% block page_title %}年级分析{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">年级分析</li>{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-md-4">
-        <select class="form-select" id="examSelect" onchange="loadGradeAnalysis()">
-            <option value="">请选择考试</option>
-        </select>
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <select class="form-select" id="examSelect" onchange="loadGradeAnalysis()">
+                    <option value="">请选择考试</option>
+                </select>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -16,24 +20,24 @@
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">各科均分对比</div>
+            <div class="card-header"><i class="bi bi-bar-chart me-2"></i>各科均分对比</div>
             <div class="card-body"><div id="chart-avg" style="height: 350px;"></div></div>
         </div>
     </div>
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">各科及格率/优秀率</div>
+            <div class="card-header"><i class="bi bi-percent me-2"></i>各科及格率/优秀率</div>
             <div class="card-body"><div id="chart-rates" style="height: 350px;"></div></div>
         </div>
     </div>
 </div>
 
 <div class="card">
-    <div class="card-header">各科详细统计</div>
+    <div class="card-header"><i class="bi bi-table me-2"></i>各科详细统计</div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-sm table-hover">
-                <thead class="table-light">
+                <thead>
                     <tr><th>科目</th><th>满分</th><th>参考人数</th><th>均分</th><th>最高</th><th>最低</th><th>及格率</th><th>优秀率</th></tr>
                 </thead>
                 <tbody id="subjectTable"></tbody>
@@ -45,68 +49,102 @@
 
 {% block extra_scripts %}
 <script>
+const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
+
 async function loadExams() {
-    const exams = await fetch('/api/exams/').then(r => r.json());
-    const select = document.getElementById('examSelect');
-    exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+    try {
+        const exams = await apiFetch('/api/exams/');
+        const select = document.getElementById('examSelect');
+        exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+    } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
 }
 
 async function loadGradeAnalysis() {
     const examId = document.getElementById('examSelect').value;
     if (!examId) return;
 
-    const overview = await fetch(`/api/analysis/grade/${examId}`).then(r => r.json());
+    try {
+        const overview = await apiFetch(`/api/analysis/grade/${examId}`);
 
-    // 总览卡片
-    const cardsDiv = document.getElementById('overview-cards');
-    if (overview.total && overview.total.count > 0) {
-        const t = overview.total;
-        cardsDiv.innerHTML = `
-            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">参考人数</div><div class="stat-value">${t.count}</div></div></div>
-            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">总分均分</div><div class="stat-value">${t.average}</div></div></div>
-            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">最高总分</div><div class="stat-value">${t.max}</div></div></div>
-            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">最低总分</div><div class="stat-value">${t.min}</div></div></div>
-        `;
-    }
+        // 总览卡片
+        const cardsDiv = document.getElementById('overview-cards');
+        if (overview.total && overview.total.count > 0) {
+            const t = overview.total;
+            cardsDiv.innerHTML = `
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(74,144,217,0.1);color:#4A90D9;"><i class="bi bi-people"></i></div>
+                        <div class="stat-value">${t.count}</div>
+                        <div class="stat-label">参考人数</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(103,194,58,0.1);color:#67C23A;"><i class="bi bi-graph-up"></i></div>
+                        <div class="stat-value">${t.average}</div>
+                        <div class="stat-label">总分均分</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(230,162,60,0.1);color:#E6A23C;"><i class="bi bi-award"></i></div>
+                        <div class="stat-value">${t.max}</div>
+                        <div class="stat-label">最高总分</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(245,108,108,0.1);color:#F56C6C;"><i class="bi bi-arrow-down"></i></div>
+                        <div class="stat-value">${t.min}</div>
+                        <div class="stat-label">最低总分</div>
+                    </div>
+                </div>
+            `;
+        }
 
-    const subjects = Object.values(overview.subjects || {});
+        const subjects = Object.values(overview.subjects || {});
 
-    // 统计表
-    document.getElementById('subjectTable').innerHTML = subjects.map(s => `
-        <tr>
-            <td>${s.subject}</td><td>${s.full_score}</td><td>${s.count}</td>
-            <td>${s.average}</td><td>${s.max}</td><td>${s.min}</td>
-            <td>${s.pass_rate}%</td><td>${s.excellent_rate}%</td>
-        </tr>
-    `).join('');
+        // 统计表
+        document.getElementById('subjectTable').innerHTML = subjects.map(s => `
+            <tr>
+                <td>${s.subject}</td><td>${s.full_score}</td><td>${s.count}</td>
+                <td>${s.average}</td><td>${s.max}</td><td>${s.min}</td>
+                <td>${s.pass_rate}%</td><td>${s.excellent_rate}%</td>
+            </tr>
+        `).join('');
 
-    // 均分对比图
-    if (subjects.length > 0) {
-        const avgChart = echarts.init(document.getElementById('chart-avg'));
-        avgChart.setOption({
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: subjects.map(s => s.subject) },
-            yAxis: { type: 'value', name: '均分' },
-            series: [{
-                type: 'bar', data: subjects.map(s => s.average),
-                itemStyle: { color: '#1890ff' },
-                label: { show: true, position: 'top', formatter: '{c}' }
-            }]
-        });
+        // 均分对比图
+        if (subjects.length > 0) {
+            const avgChart = echarts.init(document.getElementById('chart-avg'));
+            avgChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 50, right: 20, top: 20, bottom: 40 },
+                xAxis: { type: 'category', data: subjects.map(s => s.subject) },
+                yAxis: { type: 'value', name: '均分' },
+                series: [{
+                    type: 'bar', data: subjects.map((s, i) => ({
+                        value: s.average,
+                        itemStyle: { color: COLORS[i % COLORS.length] }
+                    })),
+                    label: { show: true, position: 'top', formatter: '{c}' }
+                }]
+            });
 
-        // 率对比图
-        const rateChart = echarts.init(document.getElementById('chart-rates'));
-        rateChart.setOption({
-            tooltip: { trigger: 'axis' },
-            legend: { data: ['及格率', '优秀率'], bottom: 0 },
-            xAxis: { type: 'category', data: subjects.map(s => s.subject) },
-            yAxis: { type: 'value', name: '%', max: 100 },
-            series: [
-                { name: '及格率', type: 'bar', data: subjects.map(s => s.pass_rate), itemStyle: { color: '#52c41a' } },
-                { name: '优秀率', type: 'bar', data: subjects.map(s => s.excellent_rate), itemStyle: { color: '#faad14' } }
-            ]
-        });
-    }
+            // 率对比图
+            const rateChart = echarts.init(document.getElementById('chart-rates'));
+            rateChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['及格率', '优秀率'], bottom: 0 },
+                grid: { left: 50, right: 20, top: 20, bottom: 50 },
+                xAxis: { type: 'category', data: subjects.map(s => s.subject) },
+                yAxis: { type: 'value', name: '%', max: 100 },
+                series: [
+                    { name: '及格率', type: 'bar', data: subjects.map(s => s.pass_rate), itemStyle: { color: COLORS[1] } },
+                    { name: '优秀率', type: 'bar', data: subjects.map(s => s.excellent_rate), itemStyle: { color: COLORS[2] } }
+                ]
+            });
+        }
+    } catch (e) { showToast('加载分析数据失败: ' + e.message, 'error'); }
 }
 
 loadExams();

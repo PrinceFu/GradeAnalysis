@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 {% block title %}学科分析{% endblock %}
-{% block page_title %}学科分析{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">学科分析</li>{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-md-3">
-        <select class="form-select" id="examSelect" onchange="loadSubjects()">
-            <option value="">请选择考试</option>
-        </select>
-    </div>
-    <div class="col-md-3">
-        <select class="form-select" id="subjectSelect" onchange="loadSubjectAnalysis()">
-            <option value="">请先选择考试</option>
-        </select>
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-4">
+                <select class="form-select" id="examSelect" onchange="loadSubjects()">
+                    <option value="">请选择考试</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" id="subjectSelect" onchange="loadSubjectAnalysis()">
+                    <option value="">请先选择考试</option>
+                </select>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -21,13 +25,13 @@
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">分数段分布</div>
+            <div class="card-header"><i class="bi bi-bar-chart me-2"></i>分数段分布</div>
             <div class="card-body"><div id="chart-dist" style="height: 350px;"></div></div>
         </div>
     </div>
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">各班均分对比</div>
+            <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>各班均分对比</div>
             <div class="card-body"><div id="chart-class-avg" style="height: 350px;"></div></div>
         </div>
     </div>
@@ -36,19 +40,25 @@
 
 {% block extra_scripts %}
 <script>
+const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
+
 async function loadExams() {
-    const exams = await fetch('/api/exams/').then(r => r.json());
-    const select = document.getElementById('examSelect');
-    exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+    try {
+        const exams = await apiFetch('/api/exams/');
+        const select = document.getElementById('examSelect');
+        exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+    } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
 }
 
 async function loadSubjects() {
     const examId = document.getElementById('examSelect').value;
     if (!examId) return;
-    const subjects = await fetch(`/api/scores/exam-subject/${examId}`).then(r => r.json());
-    const select = document.getElementById('subjectSelect');
-    select.innerHTML = '<option value="">请选择科目</option>';
-    subjects.forEach(s => select.innerHTML += `<option value="${s.id}">${s.subject}</option>`);
+    try {
+        const subjects = await apiFetch(`/api/scores/exam-subject/${examId}`);
+        const select = document.getElementById('subjectSelect');
+        select.innerHTML = '<option value="">请选择科目</option>';
+        subjects.forEach(s => select.innerHTML += `<option value="${s.id}">${s.subject}</option>`);
+    } catch (e) { showToast('加载科目失败: ' + e.message, 'error'); }
 }
 
 async function loadSubjectAnalysis() {
@@ -56,51 +66,94 @@ async function loadSubjectAnalysis() {
     if (!esId) return;
     const examId = document.getElementById('examSelect').value;
 
-    const [stats, dist, comp] = await Promise.all([
-        fetch(`/api/analysis/subject/${esId}`).then(r => r.json()),
-        fetch(`/api/analysis/distribution/${esId}`).then(r => r.json()),
-        fetch(`/api/analysis/class-comparison/${examId}`).then(r => r.json()),
-    ]);
+    try {
+        const [stats, dist, comp] = await Promise.all([
+            apiFetch(`/api/analysis/subject/${esId}`),
+            apiFetch(`/api/analysis/distribution/${esId}`),
+            apiFetch(`/api/analysis/class-comparison/${examId}`),
+        ]);
 
-    // 统计卡片
-    if (stats.count) {
-        document.getElementById('stat-cards').innerHTML = `
-            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">参考人数</div><div class="stat-value">${stats.count}</div></div></div>
-            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">均分</div><div class="stat-value">${stats.average}</div></div></div>
-            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">最高分</div><div class="stat-value">${stats.max}</div></div></div>
-            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">最低分</div><div class="stat-value">${stats.min}</div></div></div>
-            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">及格率</div><div class="stat-value">${stats.pass_rate}%</div></div></div>
-            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">优秀率</div><div class="stat-value">${stats.excellent_rate}%</div></div></div>
-        `;
-    }
+        // 统计卡片
+        if (stats.count) {
+            document.getElementById('stat-cards').innerHTML = `
+                <div class="col-md-2">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(74,144,217,0.1);color:#4A90D9;"><i class="bi bi-people"></i></div>
+                        <div class="stat-value">${stats.count}</div>
+                        <div class="stat-label">参考人数</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(103,194,58,0.1);color:#67C23A;"><i class="bi bi-graph-up"></i></div>
+                        <div class="stat-value">${stats.average}</div>
+                        <div class="stat-label">均分</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(230,162,60,0.1);color:#E6A23C;"><i class="bi bi-award"></i></div>
+                        <div class="stat-value">${stats.max}</div>
+                        <div class="stat-label">最高分</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(245,108,108,0.1);color:#F56C6C;"><i class="bi bi-arrow-down"></i></div>
+                        <div class="stat-value">${stats.min}</div>
+                        <div class="stat-label">最低分</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(144,147,153,0.1);color:#909399;"><i class="bi bi-check-circle"></i></div>
+                        <div class="stat-value">${stats.pass_rate}%</div>
+                        <div class="stat-label">及格率</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background:rgba(179,127,235,0.1);color:#b37feb;"><i class="bi bi-star"></i></div>
+                        <div class="stat-value">${stats.excellent_rate}%</div>
+                        <div class="stat-label">优秀率</div>
+                    </div>
+                </div>
+            `;
+        }
 
-    // 分数段分布
-    if (dist.labels && dist.labels.length > 0) {
-        const distChart = echarts.init(document.getElementById('chart-dist'));
-        distChart.setOption({
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: dist.labels, axisLabel: { rotate: 45 } },
-            yAxis: { type: 'value', name: '人数' },
-            series: [{ type: 'bar', data: dist.counts, itemStyle: { color: '#1890ff' } }]
-        });
-    }
+        // 分数段分布
+        if (dist.labels && dist.labels.length > 0) {
+            const distChart = echarts.init(document.getElementById('chart-dist'));
+            distChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 50, right: 20, top: 20, bottom: 60 },
+                xAxis: { type: 'category', data: dist.labels, axisLabel: { rotate: 45 } },
+                yAxis: { type: 'value', name: '人数' },
+                series: [{ type: 'bar', data: dist.counts, itemStyle: { color: COLORS[0] },
+                    label: { show: true, position: 'top' } }]
+            });
+        }
 
-    // 各班均分对比
-    if (comp.length > 0) {
-        const subjectName = stats.subject;
-        const classData = comp.map(c => ({ name: c.class_name, avg: c.subjects[subjectName] || 0 }));
-        const classChart = echarts.init(document.getElementById('chart-class-avg'));
-        classChart.setOption({
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: classData.map(c => c.name) },
-            yAxis: { type: 'value', name: '均分' },
-            series: [{
-                type: 'bar', data: classData.map(c => c.avg),
-                itemStyle: { color: '#52c41a' },
-                label: { show: true, position: 'top' }
-            }]
-        });
-    }
+        // 各班均分对比
+        if (comp.length > 0) {
+            const subjectName = stats.subject;
+            const classData = comp.map(c => ({ name: c.class_name, avg: c.subjects[subjectName] || 0 }));
+            const classChart = echarts.init(document.getElementById('chart-class-avg'));
+            classChart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 50, right: 20, top: 20, bottom: 40 },
+                xAxis: { type: 'category', data: classData.map(c => c.name) },
+                yAxis: { type: 'value', name: '均分' },
+                series: [{
+                    type: 'bar', data: classData.map((c, i) => ({
+                        value: c.avg,
+                        itemStyle: { color: COLORS[i % COLORS.length] }
+                    })),
+                    label: { show: true, position: 'top' }
+                }]
+            });
+        }
+    } catch (e) { showToast('加载分析数据失败: ' + e.message, 'error'); }
 }
 
 loadExams();

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}成绩录入{% endblock %}
-{% block page_title %}成绩录入{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">成绩录入</li>{% endblock %}
 
 {% block content %}
 <div class="row g-3 mb-4">
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header">选择考试和科目</div>
+            <div class="card-header"><i class="bi bi-gear me-2"></i>选择考试和科目</div>
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label">考试</label>
@@ -21,7 +21,7 @@
                     </select>
                 </div>
                 <hr>
-                <h6>Excel 导入成绩</h6>
+                <h6><i class="bi bi-file-earmark-excel me-1"></i>Excel 导入成绩</h6>
                 <p class="text-muted small">格式：学号、科目、成绩</p>
                 <input type="file" class="form-control form-control-sm mb-2" id="importFile" accept=".xlsx,.xls">
                 <button class="btn btn-success btn-sm w-100" onclick="importScores()">
@@ -36,15 +36,15 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span>成绩录入表</span>
+                <span><i class="bi bi-pencil-square me-2"></i>成绩录入表</span>
                 <button class="btn btn-primary btn-sm" onclick="saveScores()">
-                    <i class="bi bi-save"></i> 保存成绩
+                    <i class="bi bi-save me-1"></i> 保存成绩
                 </button>
             </div>
             <div class="card-body">
                 <div class="table-responsive" style="max-height:500px;overflow:auto;">
                     <table class="table table-sm table-hover">
-                        <thead class="table-light sticky-top">
+                        <thead class="sticky-top" style="background:#fff;">
                             <tr><th>学号</th><th>姓名</th><th>班级</th><th>成绩</th></tr>
                         </thead>
                         <tbody id="scoreTable"></tbody>
@@ -61,29 +61,33 @@
 let currentExamSubjectId = null;
 
 async function loadExams() {
-    const exams = await fetch('/api/exams/').then(r => r.json());
-    const select = document.getElementById('examSelect');
-    exams.forEach(e => {
-        select.innerHTML += `<option value="${e.id}">${e.name} (${e.exam_date})</option>`;
-    });
-    // URL 参数预选
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('exam_id')) {
-        select.value = params.get('exam_id');
-        loadExamSubjects();
-    }
+    try {
+        const exams = await apiFetch('/api/exams/');
+        const select = document.getElementById('examSelect');
+        exams.forEach(e => {
+            select.innerHTML += `<option value="${e.id}">${e.name} (${e.exam_date})</option>`;
+        });
+        // URL 参数预选
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('exam_id')) {
+            select.value = params.get('exam_id');
+            loadExamSubjects();
+        }
+    } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
 }
 
 async function loadExamSubjects() {
     const examId = document.getElementById('examSelect').value;
     if (!examId) return;
-    const subjects = await fetch(`/api/scores/exam-subject/${examId}`).then(r => r.json());
-    const select = document.getElementById('subjectSelect');
-    select.innerHTML = '<option value="">请选择科目</option>';
-    subjects.forEach(s => {
-        const conv = s.needs_conversion ? ' (赋分)' : '';
-        select.innerHTML += `<option value="${s.id}">${s.subject}${conv} (满分${s.full_score})</option>`;
-    });
+    try {
+        const subjects = await apiFetch(`/api/scores/exam-subject/${examId}`);
+        const select = document.getElementById('subjectSelect');
+        select.innerHTML = '<option value="">请选择科目</option>';
+        subjects.forEach(s => {
+            const conv = s.needs_conversion ? ' (赋分)' : '';
+            select.innerHTML += `<option value="${s.id}">${s.subject}${conv} (满分${s.full_score})</option>`;
+        });
+    } catch (e) { showToast('加载科目失败: ' + e.message, 'error'); }
 }
 
 async function loadSubjectScores() {
@@ -91,31 +95,24 @@ async function loadSubjectScores() {
     if (!esId) return;
     currentExamSubjectId = parseInt(esId);
 
-    // 加载学生列表
-    const students = await fetch('/api/students/').then(r => r.json());
-    // 尝试加载已有成绩
-    let existingScores = {};
     try {
-        const examId = document.getElementById('examSelect').value;
-        const totals = await fetch(`/api/scores/totals/${examId}`).then(r => r.json());
-        // 暂时只能通过原始方式获取
-    } catch (e) {}
-
-    const tbody = document.getElementById('scoreTable');
-    tbody.innerHTML = students.map(s => `
-        <tr>
-            <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
-            <td>
-                <input type="number" class="form-control form-control-sm score-input"
-                       data-student-id="${s.id}" min="0" max="150" step="0.5"
-                       style="width:100px;" placeholder="输入成绩">
-            </td>
-        </tr>
-    `).join('');
+        const students = await apiFetch('/api/students/');
+        const tbody = document.getElementById('scoreTable');
+        tbody.innerHTML = students.map(s => `
+            <tr>
+                <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
+                <td>
+                    <input type="number" class="form-control form-control-sm score-input"
+                           data-student-id="${s.id}" min="0" max="150" step="0.5"
+                           style="width:100px;" placeholder="输入成绩">
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
 }
 
 async function saveScores() {
-    if (!currentExamSubjectId) { alert('请先选择考试和科目'); return; }
+    if (!currentExamSubjectId) { showToast('请先选择考试和科目', 'warning'); return; }
     const inputs = document.querySelectorAll('.score-input');
     const scores = [];
     inputs.forEach(input => {
@@ -124,32 +121,31 @@ async function saveScores() {
             scores.push({ student_id: parseInt(input.dataset.studentId), raw_score: val });
         }
     });
-    if (scores.length === 0) { alert('没有输入成绩'); return; }
+    if (scores.length === 0) { showToast('没有输入成绩', 'warning'); return; }
 
-    const resp = await fetch('/api/scores/batch', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ exam_subject_id: currentExamSubjectId, scores })
-    });
-    const result = await resp.json();
-    alert(`成功录入 ${result.count} 条成绩`);
+    try {
+        const result = await apiFetch('/api/scores/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ exam_subject_id: currentExamSubjectId, scores })
+        });
+        showToast(`成功录入 ${result.count} 条成绩`, 'success');
+    } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
 }
 
 async function importScores() {
     const examId = document.getElementById('examSelect').value;
-    if (!examId) { alert('请先选择考试'); return; }
+    if (!examId) { showToast('请先选择考试', 'warning'); return; }
     const file = document.getElementById('importFile').files[0];
-    if (!file) { alert('请选择文件'); return; }
+    if (!file) { showToast('请选择文件', 'warning'); return; }
 
     const formData = new FormData();
     formData.append('file', file);
-    const resp = await fetch(`/api/scores/import/scores/${examId}`, { method: 'POST', body: formData });
-    const result = await resp.json();
-    if (result.error) { alert('导入失败: ' + result.error); }
-    else {
-        alert(`成功导入 ${result.imported} 条成绩`);
+    try {
+        const result = await apiFetch(`/api/scores/import/scores/${examId}`, { method: 'POST', body: formData });
+        showToast(`成功导入 ${result.imported} 条成绩`, 'success');
         loadSubjectScores();
-    }
+    } catch (e) { showToast('导入失败: ' + e.message, 'error'); }
 }
 
 loadExams();

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}学生管理{% endblock %}
-{% block page_title %}学生管理{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">学生管理</li>{% endblock %}
 
 {% block page_actions %}
 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
@@ -26,7 +26,7 @@
         </div>
         <div class="table-responsive">
             <table class="table table-hover table-sm">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th>学号</th><th>姓名</th><th>班级</th>
                         <th>首选科目</th><th>赋分科目1</th><th>赋分科目2</th><th>操作</th>
@@ -102,29 +102,33 @@
 let classes = [];
 
 async function loadClasses() {
-    classes = await fetch('/api/students/classes').then(r => r.json());
-    const filterSelect = document.getElementById('classFilter');
-    const addSelect = document.getElementById('addClassId');
-    classes.forEach(c => {
-        filterSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
-        addSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
-    });
+    try {
+        classes = await apiFetch('/api/students/classes');
+        const filterSelect = document.getElementById('classFilter');
+        const addSelect = document.getElementById('addClassId');
+        classes.forEach(c => {
+            filterSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            addSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        });
+    } catch (e) { showToast('加载班级失败: ' + e.message, 'error'); }
 }
 
 async function loadStudents(classId = '') {
-    const url = classId ? `/api/students/?class_id=${classId}` : '/api/students/';
-    const students = await fetch(url).then(r => r.json());
-    const tbody = document.getElementById('studentTable');
-    tbody.innerHTML = students.map(s => `
-        <tr>
-            <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
-            <td>${s.preferred_subject}</td><td>${s.elective_1}</td><td>${s.elective_2}</td>
-            <td>
-                <a href="/students/${s.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button>
-            </td>
-        </tr>
-    `).join('');
+    try {
+        const url = classId ? `/api/students/?class_id=${classId}` : '/api/students/';
+        const students = await apiFetch(url);
+        const tbody = document.getElementById('studentTable');
+        tbody.innerHTML = students.map(s => `
+            <tr>
+                <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
+                <td>${s.preferred_subject}</td><td>${s.elective_1}</td><td>${s.elective_2}</td>
+                <td>
+                    <a href="/students/${s.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
 }
 
 async function addStudent() {
@@ -136,37 +140,36 @@ async function addStudent() {
         elective_1: document.getElementById('addElec1').value,
         elective_2: document.getElementById('addElec2').value,
     };
-    const resp = await fetch('/api/students/', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
-    });
-    if (resp.ok) {
+    try {
+        await apiFetch('/api/students/', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+        });
         bootstrap.Modal.getInstance(document.getElementById('addStudentModal')).hide();
+        showToast('添加学生成功', 'success');
         loadStudents(document.getElementById('classFilter').value);
-    } else {
-        const err = await resp.json();
-        alert(err.detail || '添加失败');
-    }
+    } catch (e) { showToast('添加失败: ' + e.message, 'error'); }
 }
 
 async function deleteStudent(id) {
-    if (!confirm('确定删除？')) return;
-    await fetch(`/api/students/${id}`, { method: 'DELETE' });
-    loadStudents(document.getElementById('classFilter').value);
+    if (!confirmDelete('确定删除该学生？')) return;
+    try {
+        await apiFetch(`/api/students/${id}`, { method: 'DELETE' });
+        showToast('删除成功', 'success');
+        loadStudents(document.getElementById('classFilter').value);
+    } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
 async function importStudents() {
     const file = document.getElementById('importFile').files[0];
-    if (!file) { alert('请选择文件'); return; }
+    if (!file) { showToast('请选择文件', 'warning'); return; }
     const formData = new FormData();
     formData.append('file', file);
-    const resp = await fetch('/api/scores/import/students', { method: 'POST', body: formData });
-    const result = await resp.json();
-    if (result.error) { alert('导入失败: ' + result.error); }
-    else {
-        alert(`成功导入 ${result.imported} 名学生`);
+    try {
+        const result = await apiFetch('/api/scores/import/students', { method: 'POST', body: formData });
+        showToast(`成功导入 ${result.imported} 名学生`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
         loadStudents(document.getElementById('classFilter').value);
-    }
+    } catch (e) { showToast('导入失败: ' + e.message, 'error'); }
 }
 
 document.getElementById('classFilter').addEventListener('change', e => loadStudents(e.target.value));

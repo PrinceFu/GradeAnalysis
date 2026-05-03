@@ -1,33 +1,37 @@
 {% extends "base.html" %}
 {% block title %}纵向追踪{% endblock %}
-{% block page_title %}纵向追踪{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">纵向追踪</li>{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-md-3">
-        <select class="form-select" id="classSelect" onchange="loadStudents()">
-            <option value="">请选择班级</option>
-        </select>
-    </div>
-    <div class="col-md-3">
-        <select class="form-select" id="studentSelect" onchange="loadTrend()">
-            <option value="">请先选择班级</option>
-        </select>
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-4">
+                <select class="form-select" id="classSelect" onchange="loadStudents()">
+                    <option value="">请选择班级</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" id="studentSelect" onchange="loadTrend()">
+                    <option value="">请先选择班级</option>
+                </select>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">总分趋势</div>
+    <div class="card-header"><i class="bi bi-graph-up me-2"></i>总分趋势</div>
     <div class="card-body"><div id="chart-total-trend" style="height: 350px;"></div></div>
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">各科趋势</div>
+    <div class="card-header"><i class="bi bi-book me-2"></i>各科趋势</div>
     <div class="card-body"><div id="chart-subject-trend" style="height: 350px;"></div></div>
 </div>
 
 <div class="card">
-    <div class="card-header">成绩明细</div>
+    <div class="card-header"><i class="bi bi-table me-2"></i>成绩明细</div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-sm table-hover" id="trendTable"></table>
@@ -38,70 +42,80 @@
 
 {% block extra_scripts %}
 <script>
+const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
+
 async function loadClasses() {
-    const classes = await fetch('/api/students/classes').then(r => r.json());
-    const select = document.getElementById('classSelect');
-    classes.forEach(c => select.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+    try {
+        const classes = await apiFetch('/api/students/classes');
+        const select = document.getElementById('classSelect');
+        classes.forEach(c => select.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+    } catch (e) { showToast('加载班级列表失败: ' + e.message, 'error'); }
 }
 
 async function loadStudents() {
     const classId = document.getElementById('classSelect').value;
     if (!classId) return;
-    const students = await fetch(`/api/students/?class_id=${classId}`).then(r => r.json());
-    const select = document.getElementById('studentSelect');
-    select.innerHTML = '<option value="">请选择学生</option>';
-    students.forEach(s => select.innerHTML += `<option value="${s.id}">${s.name} (${s.student_no})</option>`);
+    try {
+        const students = await apiFetch(`/api/students/?class_id=${classId}`);
+        const select = document.getElementById('studentSelect');
+        select.innerHTML = '<option value="">请选择学生</option>';
+        students.forEach(s => select.innerHTML += `<option value="${s.id}">${s.name} (${s.student_no})</option>`);
+    } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
 }
 
 async function loadTrend() {
     const studentId = document.getElementById('studentSelect').value;
     if (!studentId) return;
-    const trend = await fetch(`/api/analysis/student-trend/${studentId}`).then(r => r.json());
-    if (trend.length === 0) { alert('暂无考试数据'); return; }
+    try {
+        const trend = await apiFetch(`/api/analysis/student-trend/${studentId}`);
+        if (trend.length === 0) { showToast('暂无考试数据', 'info'); return; }
 
-    const subjects = [...new Set(trend.flatMap(t => Object.keys(t.scores)))];
+        const subjects = [...new Set(trend.flatMap(t => Object.keys(t.scores)))];
 
-    // 总分趋势
-    const totalChart = echarts.init(document.getElementById('chart-total-trend'));
-    totalChart.setOption({
-        tooltip: { trigger: 'axis' },
-        xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
-        yAxis: { type: 'value', name: '总分', min: 0, max: 750 },
-        series: [{
-            type: 'line', smooth: true, data: trend.map(t => t.total),
-            lineStyle: { width: 3, color: '#1890ff' },
-            itemStyle: { color: '#1890ff' },
-            label: { show: true, formatter: '{c}' }
-        }]
-    });
+        // 总分趋势
+        const totalChart = echarts.init(document.getElementById('chart-total-trend'));
+        totalChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: 50, right: 20, top: 20, bottom: 40 },
+            xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
+            yAxis: { type: 'value', name: '总分', min: 0, max: 750 },
+            series: [{
+                type: 'line', smooth: true, data: trend.map(t => t.total),
+                lineStyle: { width: 3, color: COLORS[0] },
+                itemStyle: { color: COLORS[0] },
+                areaStyle: { color: COLORS[0], opacity: 0.08 },
+                label: { show: true, formatter: '{c}' }
+            }]
+        });
 
-    // 各科趋势
-    const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16', '#2f54eb'];
-    const subjChart = echarts.init(document.getElementById('chart-subject-trend'));
-    subjChart.setOption({
-        tooltip: { trigger: 'axis' },
-        legend: { data: subjects, bottom: 0 },
-        xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
-        yAxis: { type: 'value', name: '分数' },
-        series: subjects.map((subj, i) => ({
-            name: subj, type: 'line', smooth: true,
-            data: trend.map(t => t.scores[subj] || null),
-            lineStyle: { color: colors[i % colors.length] },
-            itemStyle: { color: colors[i % colors.length] }
-        }))
-    });
+        // 各科趋势
+        const subjChart = echarts.init(document.getElementById('chart-subject-trend'));
+        subjChart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: subjects, bottom: 0, type: 'scroll' },
+            grid: { left: 50, right: 20, top: 20, bottom: 50 },
+            xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
+            yAxis: { type: 'value', name: '分数' },
+            series: subjects.map((subj, i) => ({
+                name: subj, type: 'line', smooth: true,
+                data: trend.map(t => t.scores[subj] || null),
+                lineStyle: { color: COLORS[i % COLORS.length] },
+                itemStyle: { color: COLORS[i % COLORS.length] }
+            }))
+        });
 
-    // 表格
-    let html = '<thead class="table-light"><tr><th>考试</th><th>日期</th>';
-    subjects.forEach(s => html += `<th>${s}</th>`);
-    html += '<th>总分</th></tr></thead><tbody>';
-    trend.forEach(t => {
-        html += `<tr><td>${t.exam_name}</td><td>${t.exam_date}</td>`;
-        subjects.forEach(s => html += `<td>${t.scores[s] != null ? t.scores[s] : '-'}</td>`);
-        html += `<td><strong>${t.total}</strong></td></tr>`;
-    });
-    html += '</tbody>';
-    document.getElementById('trendTable').innerHTML = html;
+        // 表格
+        let html = '<thead><tr><th>考试</th><th>日期</th>';
+        subjects.forEach(s => html += `<th>${s}</th>`);
+        html += '<th>总分</th></tr></thead><tbody>';
+        trend.forEach(t => {
+            html += `<tr><td>${t.exam_name}</td><td>${t.exam_date}</td>`;
+            subjects.forEach(s => html += `<td>${t.scores[s] != null ? t.scores[s] : '-'}</td>`);
+            html += `<td><strong>${t.total}</strong></td></tr>`;
+        });
+        html += '</tbody>';
+        document.getElementById('trendTable').innerHTML = html;
+    } catch (e) { showToast('加载趋势数据失败: ' + e.message, 'error'); }
 }
 
 loadClasses();

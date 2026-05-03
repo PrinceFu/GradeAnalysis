@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}考试管理{% endblock %}
-{% block page_title %}考试管理{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">考试管理</li>{% endblock %}
 
 {% block page_actions %}
 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addExamModal">
@@ -13,7 +13,7 @@
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-hover table-sm">
-                <thead class="table-light">
+                <thead>
                     <tr><th>考试名称</th><th>日期</th><th>类型</th><th>科目数</th><th>操作</th></tr>
                 </thead>
                 <tbody id="examTable"></tbody>
@@ -50,18 +50,20 @@
 {% block extra_scripts %}
 <script>
 async function loadExams() {
-    const exams = await fetch('/api/exams/').then(r => r.json());
-    document.getElementById('examTable').innerHTML = exams.map(e => `
-        <tr>
-            <td><a href="/exams/${e.id}">${e.name}</a></td>
-            <td>${e.exam_date}</td><td>${e.exam_type}</td><td>${e.subject_count}</td>
-            <td>
-                <a href="/exams/${e.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
-                <a href="/scores/entry?exam_id=${e.id}" class="btn btn-outline-success btn-sm"><i class="bi bi-pencil"></i></a>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteExam(${e.id})"><i class="bi bi-trash"></i></button>
-            </td>
-        </tr>
-    `).join('');
+    try {
+        const exams = await apiFetch('/api/exams/');
+        document.getElementById('examTable').innerHTML = exams.map(e => `
+            <tr>
+                <td><a href="/exams/${e.id}">${e.name}</a></td>
+                <td>${e.exam_date}</td><td>${e.exam_type}</td><td>${e.subject_count}</td>
+                <td>
+                    <a href="/exams/${e.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
+                    <a href="/scores/entry?exam_id=${e.id}" class="btn btn-outline-success btn-sm"><i class="bi bi-pencil"></i></a>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteExam(${e.id})"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
 }
 
 async function addExam() {
@@ -70,21 +72,23 @@ async function addExam() {
         exam_date: document.getElementById('examDate').value,
         exam_type: document.getElementById('examType').value,
     };
-    const resp = await fetch('/api/exams/', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
-    });
-    if (resp.ok) {
+    try {
+        await apiFetch('/api/exams/', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+        });
         bootstrap.Modal.getInstance(document.getElementById('addExamModal')).hide();
+        showToast('创建考试成功', 'success');
         loadExams();
-    } else {
-        alert('创建失败');
-    }
+    } catch (e) { showToast('创建失败: ' + e.message, 'error'); }
 }
 
 async function deleteExam(id) {
-    if (!confirm('确定删除考试及其所有成绩？')) return;
-    await fetch(`/api/exams/${id}`, { method: 'DELETE' });
-    loadExams();
+    if (!confirmDelete('确定删除考试及其所有成绩？')) return;
+    try {
+        await apiFetch(`/api/exams/${id}`, { method: 'DELETE' });
+        showToast('删除成功', 'success');
+        loadExams();
+    } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
 loadExams();
