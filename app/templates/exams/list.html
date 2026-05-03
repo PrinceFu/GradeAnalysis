@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}考试管理{% endblock %}
+{% block page_title %}考试管理{% endblock %}
+
+{% block page_actions %}
+<button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addExamModal">
+    <i class="bi bi-journal-plus"></i> 创建考试
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-light">
+                    <tr><th>考试名称</th><th>日期</th><th>类型</th><th>科目数</th><th>操作</th></tr>
+                </thead>
+                <tbody id="examTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addExamModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">创建考试</h5></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">考试名称</label><input type="text" class="form-control" id="examName" placeholder="如：2026届高三一模"></div>
+                <div class="mb-3"><label class="form-label">考试日期</label><input type="date" class="form-control" id="examDate"></div>
+                <div class="mb-3">
+                    <label class="form-label">考试类型</label>
+                    <select class="form-select" id="examType">
+                        <option value="模考">模考</option><option value="月考">月考</option>
+                        <option value="期中">期中</option><option value="期末">期末</option>
+                    </select>
+                </div>
+                <p class="text-muted small">系统将自动创建语文、数学、英语、物理、历史、化学、生物、思想政治、地理 9 个科目</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="addExam()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadExams() {
+    const exams = await fetch('/api/exams/').then(r => r.json());
+    document.getElementById('examTable').innerHTML = exams.map(e => `
+        <tr>
+            <td><a href="/exams/${e.id}">${e.name}</a></td>
+            <td>${e.exam_date}</td><td>${e.exam_type}</td><td>${e.subject_count}</td>
+            <td>
+                <a href="/exams/${e.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
+                <a href="/scores/entry?exam_id=${e.id}" class="btn btn-outline-success btn-sm"><i class="bi bi-pencil"></i></a>
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteExam(${e.id})"><i class="bi bi-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function addExam() {
+    const data = {
+        name: document.getElementById('examName').value,
+        exam_date: document.getElementById('examDate').value,
+        exam_type: document.getElementById('examType').value,
+    };
+    const resp = await fetch('/api/exams/', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+    });
+    if (resp.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('addExamModal')).hide();
+        loadExams();
+    } else {
+        alert('创建失败');
+    }
+}
+
+async function deleteExam(id) {
+    if (!confirm('确定删除考试及其所有成绩？')) return;
+    await fetch(`/api/exams/${id}`, { method: 'DELETE' });
+    loadExams();
+}
+
+loadExams();
+</script>
+{% endblock %}

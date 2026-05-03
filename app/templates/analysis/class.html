@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}班级对比{% endblock %}
+{% block page_title %}班级对比{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-4">
+        <select class="form-select" id="examSelect" onchange="loadClassComparison()">
+            <option value="">请选择考试</option>
+        </select>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">各班均分雷达图</div>
+            <div class="card-body"><div id="chart-radar" style="height: 400px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">各班均分柱状图</div>
+            <div class="card-body"><div id="chart-bar" style="height: 400px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">班级详细对比</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" id="compTable"></table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadExams() {
+    const exams = await fetch('/api/exams/').then(r => r.json());
+    const select = document.getElementById('examSelect');
+    exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+}
+
+async function loadClassComparison() {
+    const examId = document.getElementById('examSelect').value;
+    if (!examId) return;
+    const data = await fetch(`/api/analysis/class-comparison/${examId}`).then(r => r.json());
+    if (data.length === 0) { alert('暂无数据'); return; }
+
+    const subjects = [...new Set(data.flatMap(d => Object.keys(d.subjects)))];
+
+    // 表格
+    let html = '<thead class="table-light"><tr><th>班级</th><th>人数</th>';
+    subjects.forEach(s => html += `<th>${s}</th>`);
+    html += '</tr></thead><tbody>';
+    data.forEach(d => {
+        html += `<tr><td>${d.class_name}</td><td>${d.student_count}</td>`;
+        subjects.forEach(s => html += `<td>${d.subjects[s] != null ? d.subjects[s] : '-'}</td>`);
+        html += '</tr>';
+    });
+    html += '</tbody>';
+    document.getElementById('compTable').innerHTML = html;
+
+    // 雷达图
+    const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2'];
+    const radarChart = echarts.init(document.getElementById('chart-radar'));
+    radarChart.setOption({
+        tooltip: {},
+        legend: { data: data.map(d => d.class_name), bottom: 0 },
+        radar: { indicator: subjects.map(s => ({ name: s, max: 150 })) },
+        series: [{
+            type: 'radar',
+            data: data.map((d, i) => ({
+                name: d.class_name,
+                value: subjects.map(s => d.subjects[s] || 0),
+                lineStyle: { color: colors[i % colors.length] },
+                areaStyle: { opacity: 0.1 }
+            }))
+        }]
+    });
+
+    // 柱状图
+    const barChart = echarts.init(document.getElementById('chart-bar'));
+    barChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: data.map(d => d.class_name), bottom: 0 },
+        xAxis: { type: 'category', data: subjects },
+        yAxis: { type: 'value', name: '均分' },
+        series: data.map((d, i) => ({
+            name: d.class_name, type: 'bar',
+            data: subjects.map(s => d.subjects[s] || 0),
+            itemStyle: { color: colors[i % colors.length] }
+        }))
+    });
+}
+
+loadExams();
+</script>
+{% endblock %}

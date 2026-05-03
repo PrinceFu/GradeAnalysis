@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}成绩录入{% endblock %}
+{% block page_title %}成绩录入{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">选择考试和科目</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">考试</label>
+                    <select class="form-select" id="examSelect" onchange="loadExamSubjects()">
+                        <option value="">请选择考试</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">科目</label>
+                    <select class="form-select" id="subjectSelect" onchange="loadSubjectScores()">
+                        <option value="">请先选择考试</option>
+                    </select>
+                </div>
+                <hr>
+                <h6>Excel 导入成绩</h6>
+                <p class="text-muted small">格式：学号、科目、成绩</p>
+                <input type="file" class="form-control form-control-sm mb-2" id="importFile" accept=".xlsx,.xls">
+                <button class="btn btn-success btn-sm w-100" onclick="importScores()">
+                    <i class="bi bi-file-earmark-excel"></i> 导入 Excel
+                </button>
+                <a href="/api/scores/template/scores" class="btn btn-outline-secondary btn-sm w-100 mt-2">
+                    <i class="bi bi-download"></i> 下载模板
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>成绩录入表</span>
+                <button class="btn btn-primary btn-sm" onclick="saveScores()">
+                    <i class="bi bi-save"></i> 保存成绩
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height:500px;overflow:auto;">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light sticky-top">
+                            <tr><th>学号</th><th>姓名</th><th>班级</th><th>成绩</th></tr>
+                        </thead>
+                        <tbody id="scoreTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentExamSubjectId = null;
+
+async function loadExams() {
+    const exams = await fetch('/api/exams/').then(r => r.json());
+    const select = document.getElementById('examSelect');
+    exams.forEach(e => {
+        select.innerHTML += `<option value="${e.id}">${e.name} (${e.exam_date})</option>`;
+    });
+    // URL 参数预选
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('exam_id')) {
+        select.value = params.get('exam_id');
+        loadExamSubjects();
+    }
+}
+
+async function loadExamSubjects() {
+    const examId = document.getElementById('examSelect').value;
+    if (!examId) return;
+    const subjects = await fetch(`/api/scores/exam-subject/${examId}`).then(r => r.json());
+    const select = document.getElementById('subjectSelect');
+    select.innerHTML = '<option value="">请选择科目</option>';
+    subjects.forEach(s => {
+        const conv = s.needs_conversion ? ' (赋分)' : '';
+        select.innerHTML += `<option value="${s.id}">${s.subject}${conv} (满分${s.full_score})</option>`;
+    });
+}
+
+async function loadSubjectScores() {
+    const esId = document.getElementById('subjectSelect').value;
+    if (!esId) return;
+    currentExamSubjectId = parseInt(esId);
+
+    // 加载学生列表
+    const students = await fetch('/api/students/').then(r => r.json());
+    // 尝试加载已有成绩
+    let existingScores = {};
+    try {
+        const examId = document.getElementById('examSelect').value;
+        const totals = await fetch(`/api/scores/totals/${examId}`).then(r => r.json());
+        // 暂时只能通过原始方式获取
+    } catch (e) {}
+
+    const tbody = document.getElementById('scoreTable');
+    tbody.innerHTML = students.map(s => `
+        <tr>
+            <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
+            <td>
+                <input type="number" class="form-control form-control-sm score-input"
+                       data-student-id="${s.id}" min="0" max="150" step="0.5"
+                       style="width:100px;" placeholder="输入成绩">
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function saveScores() {
+    if (!currentExamSubjectId) { alert('请先选择考试和科目'); return; }
+    const inputs = document.querySelectorAll('.score-input');
+    const scores = [];
+    inputs.forEach(input => {
+        const val = parseFloat(input.value);
+        if (!isNaN(val)) {
+            scores.push({ student_id: parseInt(input.dataset.studentId), raw_score: val });
+        }
+    });
+    if (scores.length === 0) { alert('没有输入成绩'); return; }
+
+    const resp = await fetch('/api/scores/batch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ exam_subject_id: currentExamSubjectId, scores })
+    });
+    const result = await resp.json();
+    alert(`成功录入 ${result.count} 条成绩`);
+}
+
+async function importScores() {
+    const examId = document.getElementById('examSelect').value;
+    if (!examId) { alert('请先选择考试'); return; }
+    const file = document.getElementById('importFile').files[0];
+    if (!file) { alert('请选择文件'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    const resp = await fetch(`/api/scores/import/scores/${examId}`, { method: 'POST', body: formData });
+    const result = await resp.json();
+    if (result.error) { alert('导入失败: ' + result.error); }
+    else {
+        alert(`成功导入 ${result.imported} 条成绩`);
+        loadSubjectScores();
+    }
+}
+
+loadExams();
+</script>
+{% endblock %}

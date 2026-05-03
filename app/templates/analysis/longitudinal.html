@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}纵向追踪{% endblock %}
+{% block page_title %}纵向追踪{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-3">
+        <select class="form-select" id="classSelect" onchange="loadStudents()">
+            <option value="">请选择班级</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="studentSelect" onchange="loadTrend()">
+            <option value="">请先选择班级</option>
+        </select>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">总分趋势</div>
+    <div class="card-body"><div id="chart-total-trend" style="height: 350px;"></div></div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">各科趋势</div>
+    <div class="card-body"><div id="chart-subject-trend" style="height: 350px;"></div></div>
+</div>
+
+<div class="card">
+    <div class="card-header">成绩明细</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" id="trendTable"></table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadClasses() {
+    const classes = await fetch('/api/students/classes').then(r => r.json());
+    const select = document.getElementById('classSelect');
+    classes.forEach(c => select.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+}
+
+async function loadStudents() {
+    const classId = document.getElementById('classSelect').value;
+    if (!classId) return;
+    const students = await fetch(`/api/students/?class_id=${classId}`).then(r => r.json());
+    const select = document.getElementById('studentSelect');
+    select.innerHTML = '<option value="">请选择学生</option>';
+    students.forEach(s => select.innerHTML += `<option value="${s.id}">${s.name} (${s.student_no})</option>`);
+}
+
+async function loadTrend() {
+    const studentId = document.getElementById('studentSelect').value;
+    if (!studentId) return;
+    const trend = await fetch(`/api/analysis/student-trend/${studentId}`).then(r => r.json());
+    if (trend.length === 0) { alert('暂无考试数据'); return; }
+
+    const subjects = [...new Set(trend.flatMap(t => Object.keys(t.scores)))];
+
+    // 总分趋势
+    const totalChart = echarts.init(document.getElementById('chart-total-trend'));
+    totalChart.setOption({
+        tooltip: { trigger: 'axis' },
+        xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
+        yAxis: { type: 'value', name: '总分', min: 0, max: 750 },
+        series: [{
+            type: 'line', smooth: true, data: trend.map(t => t.total),
+            lineStyle: { width: 3, color: '#1890ff' },
+            itemStyle: { color: '#1890ff' },
+            label: { show: true, formatter: '{c}' }
+        }]
+    });
+
+    // 各科趋势
+    const colors = ['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16', '#2f54eb'];
+    const subjChart = echarts.init(document.getElementById('chart-subject-trend'));
+    subjChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: subjects, bottom: 0 },
+        xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
+        yAxis: { type: 'value', name: '分数' },
+        series: subjects.map((subj, i) => ({
+            name: subj, type: 'line', smooth: true,
+            data: trend.map(t => t.scores[subj] || null),
+            lineStyle: { color: colors[i % colors.length] },
+            itemStyle: { color: colors[i % colors.length] }
+        }))
+    });
+
+    // 表格
+    let html = '<thead class="table-light"><tr><th>考试</th><th>日期</th>';
+    subjects.forEach(s => html += `<th>${s}</th>`);
+    html += '<th>总分</th></tr></thead><tbody>';
+    trend.forEach(t => {
+        html += `<tr><td>${t.exam_name}</td><td>${t.exam_date}</td>`;
+        subjects.forEach(s => html += `<td>${t.scores[s] != null ? t.scores[s] : '-'}</td>`);
+        html += `<td><strong>${t.total}</strong></td></tr>`;
+    });
+    html += '</tbody>';
+    document.getElementById('trendTable').innerHTML = html;
+}
+
+loadClasses();
+</script>
+{% endblock %}

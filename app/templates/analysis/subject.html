@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}学科分析{% endblock %}
+{% block page_title %}学科分析{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-3">
+        <select class="form-select" id="examSelect" onchange="loadSubjects()">
+            <option value="">请选择考试</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="subjectSelect" onchange="loadSubjectAnalysis()">
+            <option value="">请先选择考试</option>
+        </select>
+    </div>
+</div>
+
+<div class="row g-3 mb-4" id="stat-cards"></div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">分数段分布</div>
+            <div class="card-body"><div id="chart-dist" style="height: 350px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">各班均分对比</div>
+            <div class="card-body"><div id="chart-class-avg" style="height: 350px;"></div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadExams() {
+    const exams = await fetch('/api/exams/').then(r => r.json());
+    const select = document.getElementById('examSelect');
+    exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+}
+
+async function loadSubjects() {
+    const examId = document.getElementById('examSelect').value;
+    if (!examId) return;
+    const subjects = await fetch(`/api/scores/exam-subject/${examId}`).then(r => r.json());
+    const select = document.getElementById('subjectSelect');
+    select.innerHTML = '<option value="">请选择科目</option>';
+    subjects.forEach(s => select.innerHTML += `<option value="${s.id}">${s.subject}</option>`);
+}
+
+async function loadSubjectAnalysis() {
+    const esId = document.getElementById('subjectSelect').value;
+    if (!esId) return;
+    const examId = document.getElementById('examSelect').value;
+
+    const [stats, dist, comp] = await Promise.all([
+        fetch(`/api/analysis/subject/${esId}`).then(r => r.json()),
+        fetch(`/api/analysis/distribution/${esId}`).then(r => r.json()),
+        fetch(`/api/analysis/class-comparison/${examId}`).then(r => r.json()),
+    ]);
+
+    // 统计卡片
+    if (stats.count) {
+        document.getElementById('stat-cards').innerHTML = `
+            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">参考人数</div><div class="stat-value">${stats.count}</div></div></div>
+            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">均分</div><div class="stat-value">${stats.average}</div></div></div>
+            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">最高分</div><div class="stat-value">${stats.max}</div></div></div>
+            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">最低分</div><div class="stat-value">${stats.min}</div></div></div>
+            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">及格率</div><div class="stat-value">${stats.pass_rate}%</div></div></div>
+            <div class="col-md-2"><div class="card stat-card p-3"><div class="stat-label">优秀率</div><div class="stat-value">${stats.excellent_rate}%</div></div></div>
+        `;
+    }
+
+    // 分数段分布
+    if (dist.labels && dist.labels.length > 0) {
+        const distChart = echarts.init(document.getElementById('chart-dist'));
+        distChart.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: dist.labels, axisLabel: { rotate: 45 } },
+            yAxis: { type: 'value', name: '人数' },
+            series: [{ type: 'bar', data: dist.counts, itemStyle: { color: '#1890ff' } }]
+        });
+    }
+
+    // 各班均分对比
+    if (comp.length > 0) {
+        const subjectName = stats.subject;
+        const classData = comp.map(c => ({ name: c.class_name, avg: c.subjects[subjectName] || 0 }));
+        const classChart = echarts.init(document.getElementById('chart-class-avg'));
+        classChart.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: classData.map(c => c.name) },
+            yAxis: { type: 'value', name: '均分' },
+            series: [{
+                type: 'bar', data: classData.map(c => c.avg),
+                itemStyle: { color: '#52c41a' },
+                label: { show: true, position: 'top' }
+            }]
+        });
+    }
+}
+
+loadExams();
+</script>
+{% endblock %}

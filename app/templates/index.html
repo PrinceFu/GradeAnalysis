@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - 成绩分析系统{% endblock %}
+{% block page_title %}仪表盘{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4" id="stats-cards">
+    <div class="col-md-3">
+        <div class="card stat-card p-3">
+            <div class="stat-label">学生总数</div>
+            <div class="stat-value" id="stat-students">-</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card p-3">
+            <div class="stat-label">班级数量</div>
+            <div class="stat-value" id="stat-classes">-</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card p-3">
+            <div class="stat-label">考试次数</div>
+            <div class="stat-value" id="stat-exams">-</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card p-3">
+            <div class="stat-label">最近考试</div>
+            <div class="stat-value" id="stat-latest" style="font-size:16px;">-</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">快速操作</div>
+            <div class="card-body">
+                <a href="/students" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-person-plus"></i> 管理学生</a>
+                <a href="/exams" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-journal-plus"></i> 管理考试</a>
+                <a href="/scores/entry" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-pencil-square"></i> 录入成绩</a>
+                <a href="/analysis/grade" class="btn btn-outline-primary me-2 mb-2"><i class="bi bi-bar-chart"></i> 年级分析</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">选科分布</div>
+            <div class="card-body">
+                <div id="chart-subject-dist" style="height: 250px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadDashboard() {
+    try {
+        const [students, classes, exams] = await Promise.all([
+            fetch('/api/students/').then(r => r.json()),
+            fetch('/api/students/classes').then(r => r.json()),
+            fetch('/api/exams/').then(r => r.json()),
+        ]);
+        document.getElementById('stat-students').textContent = students.length;
+        document.getElementById('stat-classes').textContent = classes.length;
+        document.getElementById('stat-exams').textContent = exams.length;
+        document.getElementById('stat-latest').textContent = exams.length > 0 ? exams[0].name : '暂无';
+
+        // 选科分布饼图
+        if (students.length > 0) {
+            const prefCount = {};
+            students.forEach(s => { prefCount[s.preferred_subject] = (prefCount[s.preferred_subject] || 0) + 1; });
+            const chart = echarts.init(document.getElementById('chart-subject-dist'));
+            chart.setOption({
+                tooltip: { trigger: 'item' },
+                series: [{
+                    type: 'pie', radius: ['40%', '70%'],
+                    data: Object.entries(prefCount).map(([k, v]) => ({ name: k, value: v })),
+                    label: { formatter: '{b}: {c}人 ({d}%)' }
+                }]
+            });
+        }
+    } catch (e) {
+        console.error('加载仪表盘失败:', e);
+    }
+}
+loadDashboard();
+</script>
+{% endblock %}

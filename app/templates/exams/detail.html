@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}考试详情{% endblock %}
+{% block page_title %}考试详情{% endblock %}
+
+{% block page_actions %}
+<button class="btn btn-warning btn-sm" onclick="doConversion()">
+    <i class="bi bi-arrow-repeat"></i> 执行等级赋分
+</button>
+<a class="btn btn-success btn-sm" id="exportBtn" href="#">
+    <i class="bi bi-download"></i> 导出成绩
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4" id="exam-stats"></div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">总分排名</div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height:400px;overflow:auto;">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light sticky-top">
+                            <tr><th>排名</th><th>姓名</th><th>总分</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="rankTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">分数段分布</div>
+            <div class="card-body"><div id="chart-distribution" style="height: 350px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">各科统计</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                    <tr><th>科目</th><th>满分</th><th>均分</th><th>最高</th><th>最低</th><th>及格率</th><th>优秀率</th></tr>
+                </thead>
+                <tbody id="subjectTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const examId = {{ exam_id }};
+
+async function loadExamDetail() {
+    const [exam, overview, totals] = await Promise.all([
+        fetch(`/api/exams/${examId}`).then(r => r.json()),
+        fetch(`/api/analysis/grade/${examId}`).then(r => r.json()),
+        fetch(`/api/scores/totals/${examId}`).then(r => r.json()),
+    ]);
+
+    document.getElementById('exportBtn').href = `/api/scores/export/${examId}`;
+
+    // 统计卡片
+    const statsDiv = document.getElementById('exam-stats');
+    if (overview.total && overview.total.count > 0) {
+        const t = overview.total;
+        statsDiv.innerHTML = `
+            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">参考人数</div><div class="stat-value">${t.count}</div></div></div>
+            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">总分均分</div><div class="stat-value">${t.average}</div></div></div>
+            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">最高总分</div><div class="stat-value">${t.max}</div></div></div>
+            <div class="col-md-3"><div class="card stat-card p-3"><div class="stat-label">最低总分</div><div class="stat-value">${t.min}</div></div></div>
+        `;
+    }
+
+    // 排名表
+    document.getElementById('rankTable').innerHTML = totals.slice(0, 100).map(t => `
+        <tr>
+            <td>${t.rank}</td><td>${t.student_name}</td><td><strong>${t.total}</strong></td>
+            <td><a href="/students/${t.student_id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a></td>
+        </tr>
+    `).join('');
+
+    // 各科统计表
+    const subjects = overview.subjects || {};
+    document.getElementById('subjectTable').innerHTML = Object.values(subjects).map(s => `
+        <tr>
+            <td>${s.subject}</td><td>${s.full_score}</td><td>${s.average}</td>
+            <td>${s.max}</td><td>${s.min}</td><td>${s.pass_rate}%</td><td>${s.excellent_rate}%</td>
+        </tr>
+    `).join('');
+
+    // 分数段分布图
+    if (totals.length > 0) {
+        const bins = {};
+        totals.forEach(t => {
+            const bin = Math.floor(t.total / 50) * 50;
+            bins[bin] = (bins[bin] || 0) + 1;
+        });
+        const sortedBins = Object.keys(bins).sort((a, b) => a - b);
+        const chart = echarts.init(document.getElementById('chart-distribution'));
+        chart.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: sortedBins.map(b => `${b}-${parseInt(b)+49}`) },
+            yAxis: { type: 'value', name: '人数' },
+            series: [{ type: 'bar', data: sortedBins.map(b => bins[b]), itemStyle: { color: '#1890ff' } }]
+        });
+    }
+}
+
+async function doConversion() {
+    if (!confirm('将对所有赋分科目（化学、生物、思想政治、地理）执行等级赋分计算，确定？')) return;
+    const resp = await fetch(`/api/scores/convert-all/${examId}`, { method: 'POST' });
+    const result = await resp.json();
+    const total = Object.values(result).reduce((a, b) => a + b, 0);
+    alert(`赋分完成，共处理 ${total} 条记录`);
+    loadExamDetail();
+}
+
+loadExamDetail();
+</script>
+{% endblock %}

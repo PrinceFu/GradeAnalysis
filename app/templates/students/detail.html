@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}学生详情{% endblock %}
+{% block page_title %}学生详情{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">基本信息</div>
+            <div class="card-body" id="student-info">加载中...</div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">成绩趋势</div>
+            <div class="card-body">
+                <div id="chart-trend" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">各次考试详情</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" id="exam-table">
+                <thead class="table-light"><tr id="exam-header"></tr></thead>
+                <tbody id="exam-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const studentId = {{ student_id }};
+
+async function loadStudentDetail() {
+    const [student, trend] = await Promise.all([
+        fetch(`/api/students/${studentId}`).then(r => r.json()),
+        fetch(`/api/analysis/student-trend/${studentId}`).then(r => r.json()),
+    ]);
+
+    // 基本信息
+    document.getElementById('student-info').innerHTML = `
+        <p><strong>姓名：</strong>${student.name}</p>
+        <p><strong>学号：</strong>${student.student_no}</p>
+        <p><strong>班级：</strong>${student.class_name}</p>
+        <p><strong>首选科目：</strong>${student.preferred_subject}</p>
+        <p><strong>赋分科目：</strong>${student.elective_1}、${student.elective_2}</p>
+    `;
+
+    // 趋势图
+    if (trend.length > 0) {
+        const chart = echarts.init(document.getElementById('chart-trend'));
+        const subjects = Object.keys(trend[0].scores);
+        const series = subjects.map(subj => ({
+            name: subj, type: 'line', smooth: true,
+            data: trend.map(t => t.scores[subj] || 0)
+        }));
+        series.push({
+            name: '总分', type: 'line', smooth: true, lineStyle: { width: 3 },
+            data: trend.map(t => t.total), yAxisIndex: 1
+        });
+        chart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: [...subjects, '总分'], bottom: 0 },
+            xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
+            yAxis: [
+                { type: 'value', name: '单科分数', min: 0, max: 150 },
+                { type: 'value', name: '总分', min: 0, max: 750, position: 'right' }
+            ],
+            series
+        });
+    }
+
+    // 考试表格
+    if (trend.length > 0) {
+        const subjects = [...new Set(trend.flatMap(t => Object.keys(t.scores)))];
+        document.getElementById('exam-header').innerHTML =
+            '<th>考试</th>' + subjects.map(s => `<th>${s}</th>`).join('') + '<th>总分</th>';
+        document.getElementById('exam-body').innerHTML = trend.map(t => `
+            <tr>
+                <td>${t.exam_name}</td>
+                ${subjects.map(s => `<td>${t.scores[s] != null ? t.scores[s] : '-'}</td>`).join('')}
+                <td><strong>${t.total}</strong></td>
+            </tr>
+        `).join('');
+    }
+}
+loadStudentDetail();
+</script>
+{% endblock %}

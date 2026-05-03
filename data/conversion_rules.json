@@ -1,0 +1,26 @@
+{
+  "description": "江苏省高考等级赋分规则（5等21级），百分位为累计排名百分比",
+  "tiers": [
+    {"tier": "A1", "percentile_low": 0,   "percentile_high": 1,  "converted_low": 100, "converted_high": 100},
+    {"tier": "A2", "percentile_low": 1,   "percentile_high": 3,  "converted_low": 97,  "converted_high": 99},
+    {"tier": "A3", "percentile_low": 3,   "percentile_high": 6,  "converted_low": 94,  "converted_high": 96},
+    {"tier": "A4", "percentile_low": 6,   "percentile_high": 10, "converted_low": 91,  "converted_high": 93},
+    {"tier": "A5", "percentile_low": 10,  "percentile_high": 15, "converted_low": 88,  "converted_high": 90},
+    {"tier": "B1", "percentile_low": 15,  "percentile_high": 21, "converted_low": 85,  "converted_high": 87},
+    {"tier": "B2", "percentile_low": 21,  "percentile_high": 28, "converted_low": 82,  "converted_high": 84},
+    {"tier": "B3", "percentile_low": 28,  "percentile_high": 36, "converted_low": 79,  "converted_high": 81},
+    {"tier": "B4", "percentile_low": 36,  "percentile_high": 43, "converted_low": 76,  "converted_high": 78},
+    {"tier": "B5", "percentile_low": 43,  "percentile_high": 50, "converted_low": 73,  "converted_high": 75},
+    {"tier": "B6", "percentile_low": 50,  "percentile_high": 57, "converted_low": 70,  "converted_high": 72},
+    {"tier": "C1", "percentile_low": 57,  "percentile_high": 64, "converted_low": 67,  "converted_high": 69},
+    {"tier": "C2", "percentile_low": 64,  "percentile_high": 71, "converted_low": 64,  "converted_high": 66},
+    {"tier": "C3", "percentile_low": 71,  "percentile_high": 78, "converted_low": 61,  "converted_high": 63},
+    {"tier": "C4", "percentile_low": 78,  "percentile_high": 84, "converted_low": 58,  "converted_high": 60},
+    {"tier": "C5", "percentile_low": 84,  "percentile_high": 89, "converted_low": 55,  "converted_high": 57},
+    {"tier": "D1", "percentile_low": 89,  "percentile_high": 93, "converted_low": 52,  "converted_high": 54},
+    {"tier": "D2", "percentile_low": 93,  "percentile_high": 96, "converted_low": 49,  "converted_high": 51},
+    {"tier": "D3", "percentile_low": 96,  "percentile_high": 98, "converted_low": 46,  "converted_high": 48},
+    {"tier": "E1", "percentile_low": 98,  "percentile_high": 99, "converted_low": 43,  "converted_high": 45},
+    {"tier": "E2", "percentile_low": 99,  "percentile_high": 100, "converted_low": 40, "converted_high": 42}
+  ]
+}
