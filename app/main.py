@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -7,7 +8,16 @@ from fastapi.staticfiles import StaticFiles
 from app.config import BASE_DIR, CONVERSION_RULES_PATH
 from app.database import init_db, SessionLocal, engine
 
-app = FastAPI(title="江苏省高考成绩分析系统")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时初始化数据库和默认数据"""
+    init_db()
+    _seed_conversion_rules()
+    yield
+
+
+app = FastAPI(title="江苏省高考成绩分析系统", lifespan=lifespan)
 
 # 静态文件
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
@@ -20,13 +30,6 @@ app.include_router(students.router, prefix="/api/students", tags=["学生管理"
 app.include_router(exams.router, prefix="/api/exams", tags=["考试管理"])
 app.include_router(scores.router, prefix="/api/scores", tags=["成绩管理"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["统计分析"])
-
-
-@app.on_event("startup")
-def startup():
-    """初始化数据库并写入默认赋分规则"""
-    init_db()
-    _seed_conversion_rules()
 
 
 def _seed_conversion_rules():
