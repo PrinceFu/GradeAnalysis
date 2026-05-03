@@ -8,7 +8,7 @@ from sqlalchemy import func
 from app.models.score import Score
 from app.models.exam import ExamSubject
 from app.models.student import Student
-from app.services.conversion_service import CONVERSION_SUBJECTS, convert_scores_for_subject_v2
+from app.services.conversion_service import CONVERSION_SUBJECTS, convert_scores_for_subject
 
 
 def upsert_score(db: Session, student_id: int, exam_subject_id: int, raw_score: float) -> Score:
@@ -44,7 +44,7 @@ def batch_upsert_scores(db: Session, exam_subject_id: int, score_data: list[dict
 
 def trigger_conversion(db: Session, exam_subject_id: int) -> list[dict]:
     """触发某科目的等级赋分计算"""
-    return convert_scores_for_subject_v2(db, exam_subject_id)
+    return convert_scores_for_subject(db, exam_subject_id)
 
 
 def trigger_all_conversions(db: Session, exam_id: int) -> dict:
