@@ -106,35 +106,52 @@ def grade_overview(db: Session, exam_id: int) -> dict:
 
 
 def class_comparison(db: Session, exam_id: int) -> list[dict]:
-    """班级对比：每个班级各科均分和总分均分"""
+    """班级对比：每个班级各科均分和总分均分（优化：批量查询）"""
     classes = db.query(ClassGroup).all()
     exam_subjects = db.query(ExamSubject).filter(ExamSubject.exam_id == exam_id).all()
 
+    if not classes or not exam_subjects:
+        return []
+
+    # 建立学生 -> 班级映射
+    students = db.query(Student).all()
+    student_class_map = {s.id: s.class_id for s in students}
+    class_students = {}  # class_id -> [student_ids]
+    for s in students:
+        class_students.setdefault(s.class_id, []).append(s.id)
+
+    # 一次性获取所有成绩
+    es_ids = [es.id for es in exam_subjects]
+    all_scores = (
+        db.query(Score)
+        .filter(Score.exam_subject_id.in_(es_ids))
+        .all()
+    )
+
+    # 按 (class_id, subject) 聚合
+    class_subject_values = {}  # (class_id, subject) -> [values]
+    for score in all_scores:
+        cls_id = student_class_map.get(score.student_id)
+        if cls_id is None:
+            continue
+        es = next((e for e in exam_subjects if e.id == score.exam_subject_id), None)
+        if not es:
+            continue
+        key = (cls_id, es.subject)
+        val = score.converted_score if (es.needs_conversion and score.converted_score is not None) else score.raw_score
+        class_subject_values.setdefault(key, []).append(val)
+
     result = []
     for cls in classes:
-        student_ids = [s.id for s in db.query(Student).filter(Student.class_id == cls.id).all()]
-        if not student_ids:
+        sids = class_students.get(cls.id, [])
+        if not sids:
             continue
 
-        cls_data = {"class_name": cls.name, "student_count": len(student_ids), "subjects": {}}
-
+        cls_data = {"class_name": cls.name, "student_count": len(sids), "subjects": {}}
         for es in exam_subjects:
-            scores = (
-                db.query(Score)
-                .filter(Score.exam_subject_id == es.id, Score.student_id.in_(student_ids))
-                .all()
-            )
-            if not scores:
-                continue
-
-            values = []
-            for s in scores:
-                if es.needs_conversion and s.converted_score is not None:
-                    values.append(s.converted_score)
-                else:
-                    values.append(s.raw_score)
-
-            cls_data["subjects"][es.subject] = round(sum(values) / len(values), 1) if values else 0
+            values = class_subject_values.get((cls.id, es.subject), [])
+            if values:
+                cls_data["subjects"][es.subject] = round(sum(values) / len(values), 1)
 
         result.append(cls_data)
 

@@ -119,14 +119,66 @@ def get_student_total_score(db: Session, student_id: int, exam_id: int) -> dict 
 
 
 def get_exam_all_totals(db: Session, exam_id: int) -> list[dict]:
-    """计算某次考试所有学生的总分"""
+    """计算某次考试所有学生的总分（优化：单次查询）"""
+
     students = db.query(Student).all()
+    if not students:
+        return []
+
+    # 一次性获取该考试所有科目信息
+    exam_subjects = db.query(ExamSubject).filter(ExamSubject.exam_id == exam_id).all()
+    es_map = {es.subject: es for es in exam_subjects}
+    es_ids = [es.id for es in exam_subjects]
+
+    # 一次性获取所有成绩
+    all_scores = (
+        db.query(Score)
+        .filter(Score.exam_subject_id.in_(es_ids))
+        .all()
+    )
+    # 建立 (student_id, exam_subject_id) -> Score 的映射
+    score_map = {}
+    for s in all_scores:
+        score_map[(s.student_id, s.exam_subject_id)] = s
+
     results = []
     for stu in students:
-        result = get_student_total_score(db, stu.id, exam_id)
-        if result:
-            results.append(result)
-    # 按总分降序
+        scores_detail = {}
+        total = 0.0
+
+        # 3科必考
+        for subj in ["语文", "数学", "英语"]:
+            if subj in es_map:
+                score = score_map.get((stu.id, es_map[subj].id))
+                if score:
+                    scores_detail[subj] = score.raw_score
+                    total += score.raw_score
+
+        # "1"选科
+        pref = stu.preferred_subject
+        if pref in es_map:
+            score = score_map.get((stu.id, es_map[pref].id))
+            if score:
+                scores_detail[pref] = score.raw_score
+                total += score.raw_score
+
+        # "2"赋分科目
+        for elec in [stu.elective_1, stu.elective_2]:
+            if elec in es_map:
+                score = score_map.get((stu.id, es_map[elec].id))
+                if score:
+                    val = score.converted_score if score.converted_score is not None else score.raw_score
+                    scores_detail[elec] = val
+                    total += val
+
+        if scores_detail:
+            results.append({
+                "student_id": stu.id,
+                "student_name": stu.name,
+                "scores": scores_detail,
+                "total": round(total, 1),
+            })
+
     results.sort(key=lambda x: x["total"], reverse=True)
     for i, r in enumerate(results):
         r["rank"] = i + 1
