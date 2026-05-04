@@ -146,7 +146,7 @@ async function loadExamDetail() {
 }
 
 async function doConversion() {
-    if (!confirmDelete('将对所有赋分科目（化学、生物、思想政治、地理）执行等级赋分计算，确定？')) return;
+    if (!confirmDelete('将对所有赋分科目（化学、生物、政治、地理）执行等级赋分计算，确定？')) return;
     try {
         const result = await apiFetch(`/api/scores/convert-all/${examId}`, { method: 'POST' });
         const total = Object.values(result).reduce((a, b) => a + b, 0);

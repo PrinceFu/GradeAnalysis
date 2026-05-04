@@ -30,7 +30,7 @@ def test_create_exam_auto_creates_subjects(client):
     subjects = [s["subject"] for s in data["subjects"]]
     assert "化学" in subjects
     assert "生物" in subjects
-    assert "思想政治" in subjects
+    assert "政治" in subjects
     assert "地理" in subjects
 
 

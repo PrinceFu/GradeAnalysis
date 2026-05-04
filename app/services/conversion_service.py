@@ -13,7 +13,7 @@ from app.models.score import Score, ConversionRule
 from app.models.exam import ExamSubject
 
 # 需要赋分的科目
-CONVERSION_SUBJECTS = {"化学", "生物", "思想政治", "地理"}
+CONVERSION_SUBJECTS = {"化学", "生物", "政治", "地理"}
 
 
 def convert_scores_for_subject(db: Session, exam_subject_id: int) -> list[dict]:

@@ -12,6 +12,9 @@
 <a href="/api/scores/template/students" class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-download"></i> 下载模板
 </a>
+<a href="/api/students/export/all" class="btn btn-outline-info btn-sm">
+    <i class="bi bi-file-earmark-arrow-down"></i> 导出学生
+</a>
 {% endblock %}
 
 {% block content %}
@@ -23,13 +26,21 @@
                     <option value="">全部班级</option>
                 </select>
             </div>
+            <div class="col-md-3">
+                <select id="comboFilter" class="form-select form-select-sm">
+                    <option value="">全部组合</option>
+                </select>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-hover table-sm">
                 <thead>
                     <tr>
-                        <th>学号</th><th>姓名</th><th>班级</th>
-                        <th>首选科目</th><th>赋分科目1</th><th>赋分科目2</th><th>操作</th>
+                        <th class="sortable" data-sort="student_no">学号 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="sortable" data-sort="class_name">班级 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="sortable" data-sort="name">姓名 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="sortable" data-sort="combination">组合 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="studentTable"></tbody>
@@ -44,30 +55,28 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title">添加学生</h5></div>
             <div class="modal-body">
-                <div class="mb-3"><label class="form-label">学号</label><input type="text" class="form-control" id="addStudentNo"></div>
-                <div class="mb-3"><label class="form-label">姓名</label><input type="text" class="form-control" id="addName"></div>
+                <div class="mb-3"><label class="form-label">学号 <span class="text-danger">*</span></label><input type="text" class="form-control" id="addStudentNo" required></div>
+                <div class="mb-3"><label class="form-label">姓名 <span class="text-danger">*</span></label><input type="text" class="form-control" id="addName" required></div>
                 <div class="mb-3">
-                    <label class="form-label">班级</label>
-                    <select class="form-select" id="addClassId"></select>
+                    <label class="form-label">班级 <span class="text-danger">*</span></label>
+                    <select class="form-select" id="addClassId" required></select>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">首选科目</label>
-                    <select class="form-select" id="addPreferred">
-                        <option value="物理">物理</option><option value="历史">历史</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">赋分科目1</label>
-                    <select class="form-select" id="addElec1">
-                        <option value="化学">化学</option><option value="生物">生物</option>
-                        <option value="思想政治">思想政治</option><option value="地理">地理</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">赋分科目2</label>
-                    <select class="form-select" id="addElec2">
-                        <option value="化学">化学</option><option value="生物">生物</option>
-                        <option value="思想政治">思想政治</option><option value="地理">地理</option>
+                    <label class="form-label">组合 <small class="text-muted">（选填）</small></label>
+                    <select class="form-select" id="addCombination">
+                        <option value="">（全部科目）</option>
+                        <option value="物化生">物化生</option>
+                        <option value="物化政">物化政</option>
+                        <option value="物化地">物化地</option>
+                        <option value="物生政">物生政</option>
+                        <option value="物生地">物生地</option>
+                        <option value="物政地">物政地</option>
+                        <option value="史政地">史政地</option>
+                        <option value="史化政">史化政</option>
+                        <option value="史化地">史化地</option>
+                        <option value="史生政">史生政</option>
+                        <option value="史生地">史生地</option>
+                        <option value="史化生">史化生</option>
                     </select>
                 </div>
             </div>
@@ -79,13 +88,56 @@
     </div>
 </div>
 
+<!-- 编辑学生弹窗 -->
+<div class="modal fade" id="editStudentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">编辑学生</h5></div>
+            <div class="modal-body">
+                <input type="hidden" id="editStudentId">
+                <div class="mb-3"><label class="form-label">学号 <span class="text-danger">*</span></label><input type="text" class="form-control" id="editStudentNo" required></div>
+                <div class="mb-3"><label class="form-label">姓名 <span class="text-danger">*</span></label><input type="text" class="form-control" id="editName" required></div>
+                <div class="mb-3">
+                    <label class="form-label">班级 <span class="text-danger">*</span></label>
+                    <select class="form-select" id="editClassId" required></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">组合 <small class="text-muted">（选填）</small></label>
+                    <select class="form-select" id="editCombination">
+                        <option value="">（全部科目）</option>
+                        <option value="物化生">物化生</option>
+                        <option value="物化政">物化政</option>
+                        <option value="物化地">物化地</option>
+                        <option value="物生政">物生政</option>
+                        <option value="物生地">物生地</option>
+                        <option value="物政地">物政地</option>
+                        <option value="史政地">史政地</option>
+                        <option value="史化政">史化政</option>
+                        <option value="史化地">史化地</option>
+                        <option value="史生政">史生政</option>
+                        <option value="史生地">史生地</option>
+                        <option value="史化生">史化生</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="updateStudent()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 导入弹窗 -->
 <div class="modal fade" id="importModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title">Excel 导入学生</h5></div>
             <div class="modal-body">
-                <p class="text-muted">请按模板格式准备 Excel 文件，包含：学号、姓名、班级、首选科目、赋分科目1、赋分科目2</p>
+                <p class="text-muted mb-2">请按模板格式准备 Excel 文件。</p>
+                <p class="mb-1"><span class="text-danger">*</span> 必填列：<strong>学号、姓名、班级</strong></p>
+                <p class="mb-1 text-muted">选填列：组合</p>
+                <p class="mb-0 text-muted"><small>仅导入学生信息，成绩请在"成绩录入"页面导入。列名需与模板一致，首尾空格会自动去除。</small></p>
                 <input type="file" class="form-control" id="importFile" accept=".xlsx,.xls">
             </div>
             <div class="modal-footer">
@@ -98,56 +150,142 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<style>
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { background: rgba(0,0,0,0.04); }
+.sort-icon { font-size: 0.7em; opacity: 0.4; }
+.sortable.asc .sort-icon { opacity: 1; }
+.sortable.desc .sort-icon { opacity: 1; }
+</style>
 <script>
 let classes = [];
+let currentSort = { by: 'student_no', order: 'asc' };
 
 async function loadClasses() {
     try {
         classes = await apiFetch('/api/students/classes');
-        const filterSelect = document.getElementById('classFilter');
-        const addSelect = document.getElementById('addClassId');
-        classes.forEach(c => {
-            filterSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
-            addSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        // 添加/编辑弹窗使用全部班级
+        ['addClassId', 'editClassId'].forEach(id => {
+            const sel = document.getElementById(id);
+            sel.innerHTML = '<option value="">请选择班级</option>';
+            classes.forEach(c => {
+                sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
         });
     } catch (e) { showToast('加载班级失败: ' + e.message, 'error'); }
 }
 
-async function loadStudents(classId = '') {
+async function loadClassesWithStudents() {
     try {
-        const url = classId ? `/api/students/?class_id=${classId}` : '/api/students/';
+        const classesWithStudents = await apiFetch('/api/students/classes/with-students');
+        const sel = document.getElementById('classFilter');
+        sel.innerHTML = '<option value="">全部班级</option>';
+        classesWithStudents.forEach(c => {
+            sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        });
+    } catch (e) { showToast('加载班级筛选失败: ' + e.message, 'error'); }
+}
+
+async function loadAvailableCombinations() {
+    try {
+        const combos = await apiFetch('/api/students/combinations/available');
+        const sel = document.getElementById('comboFilter');
+        sel.innerHTML = '<option value="">全部组合</option>';
+        combos.forEach(c => {
+            sel.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+    } catch (e) { showToast('加载组合筛选失败: ' + e.message, 'error'); }
+}
+
+async function loadStudents() {
+    const classId = document.getElementById('classFilter').value;
+    const combo = document.getElementById('comboFilter').value;
+    let url = '/api/students/?';
+    if (classId) url += `class_id=${classId}&`;
+    if (combo) url += `combination=${combo}&`;
+    url += `sort_by=${currentSort.by}&sort_order=${currentSort.order}`;
+
+    try {
         const students = await apiFetch(url);
         const tbody = document.getElementById('studentTable');
-        tbody.innerHTML = students.map(s => `
-            <tr>
-                <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
-                <td>${s.preferred_subject}</td><td>${s.elective_1}</td><td>${s.elective_2}</td>
+        tbody.innerHTML = students.map(s => {
+            return `<tr>
+                <td>${s.student_no}</td>
+                <td>${s.class_name}</td>
+                <td>${s.name}</td>
+                <td>${s.combination || '<span class="text-muted">全部</span>'}</td>
                 <td>
                     <a href="/students/${s.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
+                    <button class="btn btn-outline-warning btn-sm" onclick="openEditModal(${s.id})"><i class="bi bi-pencil"></i></button>
                     <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button>
                 </td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
     } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
 }
 
 async function addStudent() {
+    const student_no = document.getElementById('addStudentNo').value.trim();
+    const name = document.getElementById('addName').value.trim();
+    const class_id = document.getElementById('addClassId').value;
+    if (!student_no || !name || !class_id) {
+        showToast('请填写学号、姓名、班级（必填项）', 'warning');
+        return;
+    }
     const data = {
-        student_no: document.getElementById('addStudentNo').value,
-        name: document.getElementById('addName').value,
-        class_id: parseInt(document.getElementById('addClassId').value),
-        preferred_subject: document.getElementById('addPreferred').value,
-        elective_1: document.getElementById('addElec1').value,
-        elective_2: document.getElementById('addElec2').value,
+        student_no,
+        name,
+        class_id: parseInt(class_id),
+        combination: document.getElementById('addCombination').value,
     };
     try {
         await apiFetch('/api/students/', {
             method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
         });
         bootstrap.Modal.getInstance(document.getElementById('addStudentModal')).hide();
+        document.getElementById('addStudentNo').value = '';
+        document.getElementById('addName').value = '';
         showToast('添加学生成功', 'success');
-        loadStudents(document.getElementById('classFilter').value);
+        loadStudents();
+        loadClassesWithStudents();
     } catch (e) { showToast('添加失败: ' + e.message, 'error'); }
+}
+
+async function openEditModal(id) {
+    try {
+        const s = await apiFetch(`/api/students/${id}`);
+        document.getElementById('editStudentId').value = s.id;
+        document.getElementById('editStudentNo').value = s.student_no;
+        document.getElementById('editName').value = s.name;
+        document.getElementById('editClassId').value = s.class_id;
+        document.getElementById('editCombination').value = s.combination;
+        new bootstrap.Modal(document.getElementById('editStudentModal')).show();
+    } catch (e) { showToast('加载学生信息失败: ' + e.message, 'error'); }
+}
+
+async function updateStudent() {
+    const id = document.getElementById('editStudentId').value;
+    const student_no = document.getElementById('editStudentNo').value.trim();
+    const name = document.getElementById('editName').value.trim();
+    const class_id = document.getElementById('editClassId').value;
+    if (!student_no || !name || !class_id) {
+        showToast('请填写学号、姓名、班级（必填项）', 'warning');
+        return;
+    }
+    const data = {
+        student_no,
+        name,
+        class_id: parseInt(class_id),
+        combination: document.getElementById('editCombination').value,
+    };
+    try {
+        await apiFetch(`/api/students/${id}`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+        });
+        bootstrap.Modal.getInstance(document.getElementById('editStudentModal')).hide();
+        showToast('修改成功', 'success');
+        loadStudents();
+    } catch (e) { showToast('修改失败: ' + e.message, 'error'); }
 }
 
 async function deleteStudent(id) {
@@ -155,7 +293,8 @@ async function deleteStudent(id) {
     try {
         await apiFetch(`/api/students/${id}`, { method: 'DELETE' });
         showToast('删除成功', 'success');
-        loadStudents(document.getElementById('classFilter').value);
+        loadStudents();
+        loadClassesWithStudents();
     } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
@@ -166,13 +305,45 @@ async function importStudents() {
     formData.append('file', file);
     try {
         const result = await apiFetch('/api/scores/import/students', { method: 'POST', body: formData });
-        showToast(`成功导入 ${result.imported} 名学生`, 'success');
+        if (result.error) {
+            showToast('导入失败: ' + result.error, 'error');
+            return;
+        }
+        let msg = `成功导入 ${result.imported} 名学生`;
+        if (result.errors && result.errors.length > 0) {
+            msg += `。${result.errors.length} 条数据有误: ${result.errors.slice(0, 3).join('; ')}`;
+        }
+        showToast(msg, result.imported > 0 ? 'success' : 'warning');
         bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
-        loadStudents(document.getElementById('classFilter').value);
+        loadStudents();
+        loadClassesWithStudents();
+        loadAvailableCombinations();
     } catch (e) { showToast('导入失败: ' + e.message, 'error'); }
 }
 
-document.getElementById('classFilter').addEventListener('change', e => loadStudents(e.target.value));
-loadClasses().then(() => loadStudents());
+// 排序事件绑定
+function bindSortEvents() {
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const field = th.dataset.sort;
+            if (currentSort.by === field) {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.by = field;
+                currentSort.order = 'asc';
+            }
+            document.querySelectorAll('.sortable').forEach(t => t.classList.remove('asc', 'desc'));
+            th.classList.add(currentSort.order);
+            loadStudents();
+        });
+    });
+}
+
+// 筛选
+document.getElementById('classFilter').addEventListener('change', loadStudents);
+document.getElementById('comboFilter').addEventListener('change', loadStudents);
+
+bindSortEvents();
+Promise.all([loadClasses(), loadClassesWithStudents(), loadAvailableCombinations()]).then(() => loadStudents());
 </script>
 {% endblock %}

@@ -21,9 +21,7 @@ class Student(Base):
     name = Column(String(50), nullable=False)
     student_no = Column(String(20), unique=True, nullable=False)
     class_id = Column(Integer, ForeignKey("class_groups.id"), nullable=False)
-    preferred_subject = Column(String(10), nullable=False, comment="物理或历史")
-    elective_1 = Column(String(10), nullable=False, comment="赋分科目1")
-    elective_2 = Column(String(10), nullable=False, comment="赋分科目2")
+    combination = Column(String(20), nullable=True, default="", comment="选科组合，如物化生、史政地；为空则计算全部科目")
 
     class_group = relationship("ClassGroup", back_populates="students")
     scores = relationship("Score", back_populates="student")

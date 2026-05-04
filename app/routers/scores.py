@@ -112,8 +112,11 @@ def list_exam_subjects(exam_id: int, db: Session = Depends(get_db)):
 # ---- Excel 导入导出 ----
 
 @router.post("/import/students")
-async def import_students(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """从 Excel 导入学生"""
+async def import_students(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """从 Excel 导入学生（仅学生信息）"""
     content = await file.read()
     result = import_students_from_excel(db, content)
     return result

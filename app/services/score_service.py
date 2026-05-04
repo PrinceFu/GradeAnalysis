@@ -10,6 +10,66 @@ from app.models.exam import ExamSubject
 from app.models.student import Student
 from app.services.conversion_service import CONVERSION_SUBJECTS, convert_scores_for_subject
 
+# 组合 -> 科目列表映射
+COMBINATION_SUBJECTS = {
+    "物化生": ["语文", "数学", "英语", "物理", "化学", "生物"],
+    "物化政": ["语文", "数学", "英语", "物理", "化学", "政治"],
+    "物化地": ["语文", "数学", "英语", "物理", "化学", "地理"],
+    "物生政": ["语文", "数学", "英语", "物理", "生物", "政治"],
+    "物生地": ["语文", "数学", "英语", "物理", "生物", "地理"],
+    "物政地": ["语文", "数学", "英语", "物理", "政治", "地理"],
+    "史政地": ["语文", "数学", "英语", "历史", "政治", "地理"],
+    "史化政": ["语文", "数学", "英语", "历史", "化学", "政治"],
+    "史化地": ["语文", "数学", "英语", "历史", "化学", "地理"],
+    "史生政": ["语文", "数学", "英语", "历史", "生物", "政治"],
+    "史生地": ["语文", "数学", "英语", "历史", "生物", "地理"],
+    "史化生": ["语文", "数学", "英语", "历史", "化学", "生物"],
+}
+
+ALL_SUBJECTS = ["语文", "数学", "英语", "物理", "化学", "生物", "政治", "历史", "地理"]
+
+# 需要赋分的科目
+CONVERSION_SET = {"化学", "生物", "政治", "地理"}
+
+
+def _get_subjects_for_student(student: Student) -> list[str]:
+    """根据学生的组合返回需要计算的科目列表"""
+    if student.combination and student.combination in COMBINATION_SUBJECTS:
+        return COMBINATION_SUBJECTS[student.combination]
+    return ALL_SUBJECTS
+
+
+def _calc_student_total(student: Student, es_map: dict, score_getter) -> dict | None:
+    """
+    计算学生总分的通用逻辑
+    score_getter: 接受 (student_id, exam_subject_id) 返回 Score 对象
+    """
+    subjects = _get_subjects_for_student(student)
+    scores_detail = {}
+    total = 0.0
+
+    for subj in subjects:
+        if subj not in es_map:
+            continue
+        score = score_getter(student.id, es_map[subj].id)
+        if score:
+            if subj in CONVERSION_SET and score.converted_score is not None:
+                val = score.converted_score
+            else:
+                val = score.raw_score
+            scores_detail[subj] = val
+            total += val
+
+    if not scores_detail:
+        return None
+
+    return {
+        "student_id": student.id,
+        "student_name": student.name,
+        "scores": scores_detail,
+        "total": round(total, 1),
+    }
+
 
 def upsert_score(db: Session, student_id: int, exam_subject_id: int, raw_score: float) -> Score:
     """录入或更新某学生某科目的成绩"""
@@ -63,8 +123,8 @@ def trigger_all_conversions(db: Session, exam_id: int) -> dict:
 
 def get_student_total_score(db: Session, student_id: int, exam_id: int) -> dict | None:
     """
-    计算某学生某次考试的总分（3+1+2）
-    返回 {"student_id", "scores": {subject: score}, "total"}
+    计算某学生某次考试的总分
+    根据学生的组合决定计算哪些科目
     """
     student = db.get(Student, student_id)
     if not student:
@@ -73,49 +133,12 @@ def get_student_total_score(db: Session, student_id: int, exam_id: int) -> dict 
     exam_subjects = db.query(ExamSubject).filter(ExamSubject.exam_id == exam_id).all()
     es_map = {es.subject: es for es in exam_subjects}
 
-    scores_detail = {}
-    total = 0.0
-
-    # 3 科必考：语文、数学、英语（原始分）
-    for subj in ["语文", "数学", "英语"]:
-        if subj in es_map:
-            score = db.query(Score).filter(
-                Score.student_id == student_id,
-                Score.exam_subject_id == es_map[subj].id
-            ).first()
-            if score:
-                scores_detail[subj] = score.raw_score
-                total += score.raw_score
-
-    # "1" 选科：物理或历史（原始分）
-    pref = student.preferred_subject
-    if pref in es_map:
-        score = db.query(Score).filter(
-            Score.student_id == student_id,
-            Score.exam_subject_id == es_map[pref].id
+    def score_getter(sid, esid):
+        return db.query(Score).filter(
+            Score.student_id == sid, Score.exam_subject_id == esid
         ).first()
-        if score:
-            scores_detail[pref] = score.raw_score
-            total += score.raw_score
 
-    # "2" 赋分科目（赋分后分数）
-    for elec in [student.elective_1, student.elective_2]:
-        if elec in es_map:
-            score = db.query(Score).filter(
-                Score.student_id == student_id,
-                Score.exam_subject_id == es_map[elec].id
-            ).first()
-            if score:
-                val = score.converted_score if score.converted_score is not None else score.raw_score
-                scores_detail[elec] = val
-                total += val
-
-    return {
-        "student_id": student_id,
-        "student_name": student.name,
-        "scores": scores_detail,
-        "total": round(total, 1),
-    }
+    return _calc_student_total(student, es_map, score_getter)
 
 
 def get_exam_all_totals(db: Session, exam_id: int) -> list[dict]:
@@ -141,43 +164,14 @@ def get_exam_all_totals(db: Session, exam_id: int) -> list[dict]:
     for s in all_scores:
         score_map[(s.student_id, s.exam_subject_id)] = s
 
+    def score_getter(sid, esid):
+        return score_map.get((sid, esid))
+
     results = []
     for stu in students:
-        scores_detail = {}
-        total = 0.0
-
-        # 3科必考
-        for subj in ["语文", "数学", "英语"]:
-            if subj in es_map:
-                score = score_map.get((stu.id, es_map[subj].id))
-                if score:
-                    scores_detail[subj] = score.raw_score
-                    total += score.raw_score
-
-        # "1"选科
-        pref = stu.preferred_subject
-        if pref in es_map:
-            score = score_map.get((stu.id, es_map[pref].id))
-            if score:
-                scores_detail[pref] = score.raw_score
-                total += score.raw_score
-
-        # "2"赋分科目
-        for elec in [stu.elective_1, stu.elective_2]:
-            if elec in es_map:
-                score = score_map.get((stu.id, es_map[elec].id))
-                if score:
-                    val = score.converted_score if score.converted_score is not None else score.raw_score
-                    scores_detail[elec] = val
-                    total += val
-
-        if scores_detail:
-            results.append({
-                "student_id": stu.id,
-                "student_name": stu.name,
-                "scores": scores_detail,
-                "total": round(total, 1),
-            })
+        result = _calc_student_total(stu, es_map, score_getter)
+        if result:
+            results.append(result)
 
     results.sort(key=lambda x: x["total"], reverse=True)
     for i, r in enumerate(results):

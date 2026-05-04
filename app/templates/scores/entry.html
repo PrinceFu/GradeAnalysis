@@ -4,25 +4,19 @@
 
 {% block content %}
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-6 mx-auto">
         <div class="card">
-            <div class="card-header"><i class="bi bi-gear me-2"></i>选择考试和科目</div>
+            <div class="card-header"><i class="bi bi-gear me-2"></i>选择考试</div>
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label">考试</label>
-                    <select class="form-select" id="examSelect" onchange="loadExamSubjects()">
+                    <select class="form-select" id="examSelect">
                         <option value="">请选择考试</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">科目</label>
-                    <select class="form-select" id="subjectSelect" onchange="loadSubjectScores()">
-                        <option value="">请先选择考试</option>
                     </select>
                 </div>
                 <hr>
                 <h6><i class="bi bi-file-earmark-excel me-1"></i>Excel 导入成绩</h6>
-                <p class="text-muted small">格式：学号、科目、成绩</p>
+                <p class="text-muted small">模板字段：学号、班级、组合、姓名、语文、数学、英语、物理、化学、生物、政治、历史、地理</p>
                 <input type="file" class="form-control form-control-sm mb-2" id="importFile" accept=".xlsx,.xls">
                 <button class="btn btn-success btn-sm w-100" onclick="importScores()">
                     <i class="bi bi-file-earmark-excel"></i> 导入 Excel
@@ -33,24 +27,39 @@
             </div>
         </div>
     </div>
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-pencil-square me-2"></i>成绩录入表</span>
-                <button class="btn btn-primary btn-sm" onclick="saveScores()">
-                    <i class="bi bi-save me-1"></i> 保存成绩
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive" style="max-height:500px;overflow:auto;">
-                    <table class="table table-sm table-hover">
-                        <thead class="sticky-top" style="background:#fff;">
-                            <tr><th>学号</th><th>姓名</th><th>班级</th><th>成绩</th></tr>
-                        </thead>
-                        <tbody id="scoreTable"></tbody>
-                    </table>
-                </div>
-            </div>
+</div>
+
+<!-- 导入结果展示区域 -->
+<div class="card" id="importResultCard" style="display: none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-check-circle me-2"></i>导入结果</span>
+        <span class="badge bg-success" id="importSummary"></span>
+    </div>
+    <div class="card-body">
+        <!-- 错误信息 -->
+        <div id="importErrors" style="display: none;"></div>
+        <!-- 学生成绩详情表格 -->
+        <div class="table-responsive">
+            <table class="table table-sm table-hover table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>学号</th>
+                        <th>姓名</th>
+                        <th>班级</th>
+                        <th>组合</th>
+                        <th>语文</th>
+                        <th>数学</th>
+                        <th>英语</th>
+                        <th>物理</th>
+                        <th>化学</th>
+                        <th>生物</th>
+                        <th>政治</th>
+                        <th>历史</th>
+                        <th>地理</th>
+                    </tr>
+                </thead>
+                <tbody id="importDetailTable"></tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -58,7 +67,7 @@
 
 {% block extra_scripts %}
 <script>
-let currentExamSubjectId = null;
+const ALL_SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理'];
 
 async function loadExams() {
     try {
@@ -71,66 +80,8 @@ async function loadExams() {
         const params = new URLSearchParams(window.location.search);
         if (params.get('exam_id')) {
             select.value = params.get('exam_id');
-            loadExamSubjects();
         }
     } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
-}
-
-async function loadExamSubjects() {
-    const examId = document.getElementById('examSelect').value;
-    if (!examId) return;
-    try {
-        const subjects = await apiFetch(`/api/scores/exam-subject/${examId}`);
-        const select = document.getElementById('subjectSelect');
-        select.innerHTML = '<option value="">请选择科目</option>';
-        subjects.forEach(s => {
-            const conv = s.needs_conversion ? ' (赋分)' : '';
-            select.innerHTML += `<option value="${s.id}">${s.subject}${conv} (满分${s.full_score})</option>`;
-        });
-    } catch (e) { showToast('加载科目失败: ' + e.message, 'error'); }
-}
-
-async function loadSubjectScores() {
-    const esId = document.getElementById('subjectSelect').value;
-    if (!esId) return;
-    currentExamSubjectId = parseInt(esId);
-
-    try {
-        const students = await apiFetch('/api/students/');
-        const tbody = document.getElementById('scoreTable');
-        tbody.innerHTML = students.map(s => `
-            <tr>
-                <td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>
-                <td>
-                    <input type="number" class="form-control form-control-sm score-input"
-                           data-student-id="${s.id}" min="0" max="150" step="0.5"
-                           style="width:100px;" placeholder="输入成绩">
-                </td>
-            </tr>
-        `).join('');
-    } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
-}
-
-async function saveScores() {
-    if (!currentExamSubjectId) { showToast('请先选择考试和科目', 'warning'); return; }
-    const inputs = document.querySelectorAll('.score-input');
-    const scores = [];
-    inputs.forEach(input => {
-        const val = parseFloat(input.value);
-        if (!isNaN(val)) {
-            scores.push({ student_id: parseInt(input.dataset.studentId), raw_score: val });
-        }
-    });
-    if (scores.length === 0) { showToast('没有输入成绩', 'warning'); return; }
-
-    try {
-        const result = await apiFetch('/api/scores/batch', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ exam_subject_id: currentExamSubjectId, scores })
-        });
-        showToast(`成功录入 ${result.count} 条成绩`, 'success');
-    } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
 }
 
 async function importScores() {
@@ -143,8 +94,49 @@ async function importScores() {
     formData.append('file', file);
     try {
         const result = await apiFetch(`/api/scores/import/scores/${examId}`, { method: 'POST', body: formData });
-        showToast(`成功导入 ${result.imported} 条成绩`, 'success');
-        loadSubjectScores();
+
+        // 显示导入结果区域
+        const resultCard = document.getElementById('importResultCard');
+        resultCard.style.display = 'block';
+
+        // 显示汇总信息
+        document.getElementById('importSummary').textContent =
+            `成功导入 ${result.imported} 名学生，${result.scores_imported} 条成绩`;
+
+        // 显示错误信息
+        const errorsDiv = document.getElementById('importErrors');
+        if (result.errors && result.errors.length > 0) {
+            errorsDiv.style.display = 'block';
+            errorsDiv.innerHTML = `
+                <div class="alert alert-warning">
+                    <strong>错误信息：</strong>
+                    <ul class="mb-0">${result.errors.map(err => `<li>${err}</li>`).join('')}</ul>
+                </div>`;
+        } else {
+            errorsDiv.style.display = 'none';
+        }
+
+        // 显示学生成绩详情表格
+        const tbody = document.getElementById('importDetailTable');
+        if (result.student_details && result.student_details.length > 0) {
+            tbody.innerHTML = result.student_details.map(s => {
+                const scoreCells = ALL_SUBJECTS.map(subj => {
+                    const val = s.scores[subj];
+                    return `<td>${val !== undefined ? val : '-'}</td>`;
+                }).join('');
+                return `<tr>
+                    <td>${s.student_no}</td>
+                    <td>${s.name}</td>
+                    <td>${s.class_name}</td>
+                    <td>${s.combination || '-'}</td>
+                    ${scoreCells}
+                </tr>`;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted">无数据</td></tr>';
+        }
+
+        showToast(`成功导入 ${result.scores_imported} 条成绩`, 'success');
     } catch (e) { showToast('导入失败: ' + e.message, 'error'); }
 }
 

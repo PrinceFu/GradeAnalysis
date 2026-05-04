@@ -43,6 +43,11 @@ def score_entry_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="scores/entry.html", request=request)
 
 
+@router.get("/grade-calc", response_class=HTMLResponse)
+def grade_calc_page(request: Request, current_user=Depends(require_user)):
+    return templates.TemplateResponse(name="grade_calc/index.html", request=request)
+
+
 @router.get("/analysis/grade", response_class=HTMLResponse)
 def grade_analysis_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="analysis/grade.html", request=request)

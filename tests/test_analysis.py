@@ -9,7 +9,7 @@ def _setup_scores(client, sample_student, sample_exam):
     scores_map = {
         "语文": 120, "数学": 135, "英语": 110,
         "物理": 85, "化学": 80, "生物": 78,
-        "思想政治": 75, "地理": 82,
+        "政治": 75, "地理": 82,
     }
     for subj_name, score in scores_map.items():
         es = next(s for s in subjects if s["subject"] == subj_name)
@@ -19,7 +19,7 @@ def _setup_scores(client, sample_student, sample_exam):
             "raw_score": float(score),
         })
 
-    for subj_name in ["化学", "生物", "思想政治", "地理"]:
+    for subj_name in ["化学", "生物", "政治", "地理"]:
         es = next(s for s in subjects if s["subject"] == subj_name)
         client.post(f"/api/scores/convert/{es['id']}")
 

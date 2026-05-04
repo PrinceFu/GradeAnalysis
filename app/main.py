@@ -28,7 +28,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=86400)
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
 # 注册路由
-from app.routers import pages, students, exams, scores, analysis, auth  # noqa: E402
+from app.routers import pages, students, exams, scores, analysis, auth, grade_calc  # noqa: E402
 
 app.include_router(auth.router, tags=["认证"])
 app.include_router(pages.router)
@@ -36,6 +36,7 @@ app.include_router(students.router, prefix="/api/students", tags=["学生管理"
 app.include_router(exams.router, prefix="/api/exams", tags=["考试管理"])
 app.include_router(scores.router, prefix="/api/scores", tags=["成绩管理"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["统计分析"])
+app.include_router(grade_calc.router, prefix="/api/grade-calc", tags=["成绩计算"])
 
 
 def _seed_conversion_rules():

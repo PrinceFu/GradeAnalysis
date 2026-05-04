@@ -97,9 +97,7 @@ def sample_student(db, sample_class):
         name="张三",
         student_no="2026001",
         class_id=sample_class.id,
-        preferred_subject="物理",
-        elective_1="化学",
-        elective_2="生物",
+        combination="物化生",
     )
     db.add(stu)
     db.commit()
@@ -119,7 +117,7 @@ def sample_exam(db):
         ("语文", 150, False), ("数学", 150, False), ("英语", 150, False),
         ("物理", 100, False), ("历史", 100, False),
         ("化学", 100, True), ("生物", 100, True),
-        ("思想政治", 100, True), ("地理", 100, True),
+        ("政治", 100, True), ("地理", 100, True),
     ]
     for name, full_score, needs_conv in subjects:
         es = ExamSubject(exam_id=exam.id, subject=name, full_score=full_score, needs_conversion=needs_conv)

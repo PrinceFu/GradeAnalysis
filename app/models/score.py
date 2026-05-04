@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, UniqueConstraint
+import json as _json
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, UniqueConstraint, DateTime, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -13,6 +14,20 @@ class ConversionRule(Base):
     percentile_high = Column(Float, nullable=False, comment="百分位上限")
     converted_low = Column(Integer, nullable=False, comment="赋分下限")
     converted_high = Column(Integer, nullable=False, comment="赋分上限")
+
+
+class ConversionTemplate(Base):
+    """赋分模板，存储用户自定义的等级人数占比"""
+    __tablename__ = "conversion_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, comment="模板名称")
+    tier_ratios = Column(String(2000), nullable=False, comment='各科目各等级人数占比JSON，如{"化学":{"A":15,"B":35,"C":35,"D":13,"E":2},"生物":{...},"政治":{...},"地理":{...}}')
+    created_at = Column(DateTime, server_default=func.now())
+
+    @property
+    def ratios_dict(self) -> dict:
+        return _json.loads(self.tier_ratios)
 
 
 class Score(Base):
