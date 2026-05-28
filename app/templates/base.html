@@ -24,33 +24,39 @@
             </a>
 
             <div class="nav-section">数据管理</div>
-            <a class="nav-link {% if '/students' in request.url.path %}active{% endif %}" href="/students">
+            <a class="nav-link {% if request.url.path == '/students' %}active{% endif %}" href="/students">
                 <i class="bi bi-people"></i> 学生管理
             </a>
-            <a class="nav-link {% if '/exams' in request.url.path %}active{% endif %}" href="/exams">
+<a class="nav-link {% if '/exams' in request.url.path %}active{% endif %}" href="/exams">
                 <i class="bi bi-journal-text"></i> 考试管理
-            </a>
-            <a class="nav-link {% if '/scores/entry' in request.url.path %}active{% endif %}" href="/scores/entry">
-                <i class="bi bi-pencil-square"></i> 成绩录入
-            </a>
-
-            <div class="nav-section">成绩计算</div>
-            <a class="nav-link {% if '/grade-calc' in request.url.path %}active{% endif %}" href="/grade-calc">
-                <i class="bi bi-calculator"></i> 成绩计算
             </a>
 
             <div class="nav-section">统计分析</div>
-            <a class="nav-link {% if '/analysis/grade' in request.url.path %}active{% endif %}" href="/analysis/grade">
-                <i class="bi bi-bar-chart"></i> 年级分析
+            <a class="nav-link {% if request.url.path == '/analysis/single' %}active{% endif %}" href="#singleExamMenu" data-bs-toggle="collapse" role="button" aria-expanded="{% if '/analysis/single' in request.url.path %}true{% else %}false{% endif %}" aria-controls="singleExamMenu">
+                <i class="bi bi-clipboard-data"></i> 单次考试分析 <i class="bi bi-chevron-down ms-auto" style="font-size:0.7em;"></i>
             </a>
-            <a class="nav-link {% if '/analysis/class' in request.url.path %}active{% endif %}" href="/analysis/class">
-                <i class="bi bi-diagram-3"></i> 班级对比
+            <div class="collapse {% if '/analysis/single' in request.url.path %}show{% endif %}" id="singleExamMenu">
+                <!-- 考试选择器 -->
+                <div class="ps-4 pe-2 pb-2">
+                    <select class="form-select form-select-sm" id="sidebarExamSelect" onchange="onSidebarExamChange(this.value)">
+                        <option value="">选择考试...</option>
+                    </select>
+                </div>
+                <a class="nav-link ps-4 {% if '/analysis/single/grade' in request.url.path %}active{% endif %}" href="#" onclick="navigateToAnalysis('grade'); return false;">
+                    <i class="bi bi-bar-chart"></i> 年级分析
+                </a>
+                <a class="nav-link ps-4 {% if '/analysis/single/class' in request.url.path %}active{% endif %}" href="#" onclick="navigateToAnalysis('class'); return false;">
+                    <i class="bi bi-diagram-3"></i> 班级分析
+                </a>
+                <a class="nav-link ps-4 {% if '/analysis/single/student' in request.url.path %}active{% endif %}" href="#" onclick="navigateToAnalysis('student'); return false;">
+                    <i class="bi bi-person"></i> 个人分析
+                </a>
+            </div>
+            <a class="nav-link {% if '/analysis/multi' in request.url.path %}active{% endif %}" href="/analysis/multi">
+                <i class="bi bi-layers"></i> 多次考试分析
             </a>
-            <a class="nav-link {% if '/analysis/subject' in request.url.path %}active{% endif %}" href="/analysis/subject">
-                <i class="bi bi-book"></i> 学科分析
-            </a>
-            <a class="nav-link {% if '/analysis/longitudinal' in request.url.path %}active{% endif %}" href="/analysis/longitudinal">
-                <i class="bi bi-graph-up"></i> 纵向追踪
+            <a class="nav-link {% if '/analysis/tracking' in request.url.path %}active{% endif %}" href="/analysis/tracking">
+                <i class="bi bi-graph-up"></i> 个人追踪分析
             </a>
         </nav>
     </div>

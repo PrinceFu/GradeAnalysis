@@ -12,12 +12,28 @@
             <div class="card-header"><i class="bi bi-person me-2"></i>基本信息</div>
             <div class="card-body" id="student-info">加载中...</div>
         </div>
+        <!-- 薄弱科目提醒 -->
+        <div class="card border-warning mt-3" id="weakCard" style="display:none">
+            <div class="card-header bg-warning text-dark"><i class="bi bi-exclamation-triangle me-2"></i>薄弱科目提醒</div>
+            <div class="card-body" id="weak-subjects"></div>
+        </div>
     </div>
     <div class="col-md-8">
         <div class="card">
             <div class="card-header"><i class="bi bi-graph-up me-2"></i>成绩趋势</div>
             <div class="card-body">
-                <div id="chart-trend" style="height: 300px;"></div>
+                <div id="chart-trend" style="height: 320px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-trophy me-2"></i>排名趋势</div>
+            <div class="card-body">
+                <div id="chart-rank" style="height: 250px;"></div>
             </div>
         </div>
     </div>
@@ -43,37 +59,78 @@ const studentId = {{ student_id }};
 
 async function loadStudentDetail() {
     try {
-        const [student, trend] = await Promise.all([
+        const [student, trend, weak] = await Promise.all([
             apiFetch(`/api/students/${studentId}`),
             apiFetch(`/api/analysis/student-trend/${studentId}`),
+            apiFetch(`/api/analysis/weak-subjects/${studentId}`).catch(() => []),
         ]);
 
         // 基本信息
+        const classInfo = student.original_class_name
+            ? `<p><strong>原班级：</strong>${student.original_class_name} → <strong>现班级：</strong>${student.class_name}</p>`
+            : `<p><strong>现班级：</strong>${student.class_name}</p>`;
         document.getElementById('student-info').innerHTML = `
             <p><strong>姓名：</strong>${student.name}</p>
             <p><strong>学号：</strong>${student.student_no}</p>
-            <p><strong>班级：</strong>${student.class_name}</p>
+            ${classInfo}
             <p><strong>组合：</strong>${student.combination || '全部科目'}</p>
+            ${student.enrollment_year ? `<p><strong>入学年份：</strong>${student.enrollment_year}</p>` : ''}
+            ${student.gender ? `<p><strong>性别：</strong>${student.gender}</p>` : ''}
+            ${student.id_card ? `<p><strong>身份证号：</strong>${student.id_card}</p>` : ''}
         `;
 
-        // 趋势图
+        // 薄弱科目
+        if (weak && weak.length > 0) {
+            document.getElementById('weakCard').style.display = '';
+            document.getElementById('weak-subjects').innerHTML = weak.map(w =>
+                `<div class="mb-2">
+                    <strong>${w.subject}</strong>：${w.score} 分
+                    <span class="text-danger">（低于班级均分 ${Math.abs(w.diff)} 分）</span>
+                    <br><small class="text-muted">班级均分 ${w.class_avg}</small>
+                </div>`
+            ).join('');
+        }
+
+        // 成绩趋势图
         if (trend.length > 0) {
             const chart = echarts.init(document.getElementById('chart-trend'));
             const subjects = Object.keys(trend[0].scores);
-            const series = subjects.map((subj, i) => ({
-                name: subj, type: 'line', smooth: true,
-                data: trend.map(t => t.scores[subj] || 0),
-                lineStyle: { color: COLORS[i % COLORS.length] },
-                itemStyle: { color: COLORS[i % COLORS.length] }
-            }));
+            const series = [];
+
+            // 各科成绩线
+            subjects.forEach((subj, i) => {
+                series.push({
+                    name: subj, type: 'line', smooth: true,
+                    data: trend.map(t => t.scores[subj] || 0),
+                    lineStyle: { color: COLORS[i % COLORS.length] },
+                    itemStyle: { color: COLORS[i % COLORS.length] }
+                });
+            });
+
+            // 总分线
             series.push({
                 name: '总分', type: 'line', smooth: true, lineStyle: { width: 3, color: COLORS[0] },
                 data: trend.map(t => t.total), yAxisIndex: 1,
                 itemStyle: { color: COLORS[0] }
             });
+
+            // 班级均分虚线
+            series.push({
+                name: '班级均分', type: 'line', lineStyle: { type: 'dashed', color: '#999' },
+                data: trend.map(t => t.class_total_avg || 0), yAxisIndex: 1,
+                itemStyle: { color: '#999' }
+            });
+
+            // 年级均分虚线
+            series.push({
+                name: '年级均分', type: 'line', lineStyle: { type: 'dashed', color: '#bbb' },
+                data: trend.map(t => t.grade_total_avg || 0), yAxisIndex: 1,
+                itemStyle: { color: '#bbb' }
+            });
+
             chart.setOption({
                 tooltip: { trigger: 'axis' },
-                legend: { data: [...subjects, '总分'], bottom: 0 },
+                legend: { data: [...subjects, '总分', '班级均分', '年级均分'], bottom: 0 },
                 grid: { left: 50, right: 50, top: 20, bottom: 50 },
                 xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
                 yAxis: [
@@ -84,16 +141,44 @@ async function loadStudentDetail() {
             });
         }
 
-        // 考试表格
+        // 排名趋势图
+        if (trend.length > 0 && trend.some(t => t.class_rank > 0)) {
+            const rankChart = echarts.init(document.getElementById('chart-rank'));
+            rankChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['班级排名', '年级排名'], bottom: 0 },
+                grid: { left: 50, right: 50, top: 20, bottom: 50 },
+                xAxis: { type: 'category', data: trend.map(t => t.exam_name) },
+                yAxis: { type: 'value', name: '排名', inverse: true },
+                series: [
+                    {
+                        name: '班级排名', type: 'line', smooth: true,
+                        data: trend.map(t => t.class_rank || null),
+                        lineStyle: { color: '#E6A23C' }, itemStyle: { color: '#E6A23C' }
+                    },
+                    {
+                        name: '年级排名', type: 'line', smooth: true,
+                        data: trend.map(t => t.grade_rank || null),
+                        lineStyle: { color: '#F56C6C' }, itemStyle: { color: '#F56C6C' }
+                    }
+                ]
+            });
+        }
+
+        // 考试表格（含排名）
         if (trend.length > 0) {
             const subjects = [...new Set(trend.flatMap(t => Object.keys(t.scores)))];
             document.getElementById('exam-header').innerHTML =
-                '<th>考试</th>' + subjects.map(s => `<th>${s}</th>`).join('') + '<th>总分</th>';
+                '<th>考试</th>' +
+                subjects.map(s => `<th>${s}</th>`).join('') +
+                '<th>总分</th><th>班级排名</th><th>年级排名</th>';
             document.getElementById('exam-body').innerHTML = trend.map(t => `
                 <tr>
                     <td>${t.exam_name}</td>
                     ${subjects.map(s => `<td>${t.scores[s] != null ? t.scores[s] : '-'}</td>`).join('')}
                     <td><strong>${t.total}</strong></td>
+                    <td>${t.class_rank || '-'}</td>
+                    <td>${t.grade_rank || '-'}</td>
                 </tr>
             `).join('');
         }

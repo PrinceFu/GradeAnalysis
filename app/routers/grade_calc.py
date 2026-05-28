@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from urllib.parse import quote
 import io
 
 from app.database import get_db
@@ -17,6 +18,7 @@ from app.services.grade_calc_service import (
     update_template,
     delete_template,
     export_grade_results,
+    export_conversion_report,
 )
 
 router = APIRouter()
@@ -62,6 +64,7 @@ class GradeExportRequest(BaseModel):
     template_id: int | None = None
     filter: str = "all"  # "all", "class", "combination"
     filter_value: str | None = None
+    filter_values: list[str] | None = None  # 支持多选
 
 
 # ---- 成绩计算 ----
@@ -157,18 +160,56 @@ def api_export_results(data: GradeExportRequest, db: Session = Depends(get_db)):
     if data.use_conversion and not data.template_id:
         raise HTTPException(status_code=400, detail="进行赋分计算时必须选择赋分模板")
     try:
+        # 优先使用 filter_values（多选），兼容单选
+        fv = data.filter_values if data.filter_values else data.filter_value
         file_data = export_grade_results(
             db, data.exam_id, data.use_conversion, data.template_id,
-            data.filter, data.filter_value,
+            data.filter, fv,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导出失败: {e}")
     if not file_data:
         raise HTTPException(status_code=404, detail="暂无数据可导出")
 
-    filename = f"grade_calc_{data.exam_id}.xlsx"
+    # 分班级/分组合导出时，文件名体现导出方式
+    if data.filter == "class":
+        suffix = "分班级导出"
+    elif data.filter == "combination":
+        suffix = "分组合导出"
+    else:
+        suffix = "成绩计算"
+    filename = f"{suffix}_{data.exam_id}.xlsx"
+    encoded = quote(filename)
     return StreamingResponse(
         io.BytesIO(file_data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
+    )
+
+
+class ReportExportRequest(BaseModel):
+    exam_id: int
+    template_id: int
+
+
+@router.post("/export-report")
+def api_export_report(data: ReportExportRequest, db: Session = Depends(get_db)):
+    """导出赋分报告为 Excel"""
+    try:
+        file_data = export_conversion_report(db, data.exam_id, data.template_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导出失败: {e}")
+    if not file_data:
+        raise HTTPException(status_code=404, detail="暂无赋分报告可导出")
+
+    filename = f"赋分报告_{data.exam_id}.xlsx"
+    encoded = quote(filename)
+    return StreamingResponse(
+        io.BytesIO(file_data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
     )

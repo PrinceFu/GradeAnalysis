@@ -14,12 +14,42 @@ from app.database import init_db, SessionLocal, engine
 async def lifespan(app: FastAPI):
     """启动时初始化数据库和默认数据"""
     init_db()
+    _migrate_db()
     _seed_conversion_rules()
     _seed_admin_user()
     yield
 
 
 app = FastAPI(title="江苏省高考成绩分析系统", lifespan=lifespan)
+
+
+def _migrate_db():
+    """启动时执行数据库迁移（无 Alembic 环境下的轻量方案）"""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
+
+    if "students" in tables:
+        columns = {col["name"] for col in inspector.get_columns("students")}
+        if "id_card" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE students ADD COLUMN id_card VARCHAR(18)"))
+        if "original_class_id" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE students ADD COLUMN original_class_id INTEGER"))
+
+    if "exams" in tables:
+        columns = {col["name"] for col in inspector.get_columns("exams")}
+        if "post_split" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE exams ADD COLUMN post_split BOOLEAN DEFAULT 0"))
+        if "exam_target" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE exams ADD COLUMN exam_target VARCHAR(10)"))
+        if "is_calculated" not in columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE exams ADD COLUMN is_calculated BOOLEAN DEFAULT 0"))
 
 # Session 中间件
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=86400)

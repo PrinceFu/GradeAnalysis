@@ -16,32 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.score import Score, ConversionTemplate
 from app.models.exam import Exam, ExamSubject
 from app.models.student import Student, ClassGroup
-
-# 组合 -> 科目列表映射（与 score_service.py 一致）
-COMBINATION_SUBJECTS = {
-    "物化生": ["语文", "数学", "英语", "物理", "化学", "生物"],
-    "物化政": ["语文", "数学", "英语", "物理", "化学", "政治"],
-    "物化地": ["语文", "数学", "英语", "物理", "化学", "地理"],
-    "物生政": ["语文", "数学", "英语", "物理", "生物", "政治"],
-    "物生地": ["语文", "数学", "英语", "物理", "生物", "地理"],
-    "物政地": ["语文", "数学", "英语", "物理", "政治", "地理"],
-    "史政地": ["语文", "数学", "英语", "历史", "政治", "地理"],
-    "史化政": ["语文", "数学", "英语", "历史", "化学", "政治"],
-    "史化地": ["语文", "数学", "英语", "历史", "化学", "地理"],
-    "史生政": ["语文", "数学", "英语", "历史", "生物", "政治"],
-    "史生地": ["语文", "数学", "英语", "历史", "生物", "地理"],
-    "史化生": ["语文", "数学", "英语", "历史", "化学", "生物"],
-}
-
-ALL_SUBJECTS = ["语文", "数学", "英语", "物理", "化学", "生物", "政治", "历史", "地理"]
-CONVERSION_SUBJECTS = {"化学", "生物", "政治", "地理"}
-# 选科组合的3门选考科目（不含语数英）
-COMBINATION_ELECTIVES = {
-    "物化生": {"物理", "化学", "生物"}, "物化政": {"物理", "化学", "政治"}, "物化地": {"物理", "化学", "地理"},
-    "物生政": {"物理", "生物", "政治"}, "物生地": {"物理", "生物", "地理"}, "物政地": {"物理", "政治", "地理"},
-    "史政地": {"历史", "政治", "地理"}, "史化政": {"历史", "化学", "政治"}, "史化地": {"历史", "化学", "地理"},
-    "史生政": {"历史", "生物", "政治"}, "史生地": {"历史", "生物", "地理"}, "史化生": {"历史", "化学", "生物"},
-}
+from app.constants import COMBINATION_SUBJECTS, ALL_SUBJECTS, CONVERSION_SUBJECTS, COMBINATION_ELECTIVES, ELECTIVE_SUBJECTS
 
 # 各等级对应的赋分区间（固定，按江苏省标准）
 TIER_SCORE_RANGES = {
@@ -54,8 +29,6 @@ TIER_SCORE_RANGES = {
 
 # 各等级的子等级数量
 TIER_SUB_COUNTS = {"A": 5, "B": 6, "C": 5, "D": 3, "E": 2}
-
-ELECTIVE_SUBJECTS = {"物理", "化学", "生物", "政治", "历史", "地理"}
 
 
 def auto_detect_combinations(students, es_map, score_map):
@@ -368,9 +341,11 @@ def calculate_grades(
         raise ValueError("考试不存在")
 
     # 批量加载数据
-    students = db.query(Student).join(ClassGroup).all()
+    students = db.query(Student).join(ClassGroup, Student.class_id == ClassGroup.id).all()
     if not students:
         return {"exam_id": exam_id, "exam_name": exam.name, "use_conversion": use_conversion, "students": []}
+
+    is_post = exam.post_split
 
     exam_subjects = db.query(ExamSubject).filter(ExamSubject.exam_id == exam_id).all()
     es_map = {es.subject: es for es in exam_subjects}
@@ -431,12 +406,18 @@ def calculate_grades(
                 has_score = True
         raw_total = round(raw_total, 1) if has_score else 0.0
 
+        # 分班前的考试用原班级，分班后的考试用现班级
+        ranking_cid = stu.class_id if is_post else (stu.original_class_id or stu.class_id)
+        ranking_cname = stu.class_group.name if is_post else (
+            stu.original_class_group.name if stu.original_class_group else stu.class_group.name
+        )
+
         entry = {
             "student_id": stu.id,
             "student_no": stu.student_no,
             "student_name": stu.name,
-            "class_name": stu.class_group.name,
-            "class_id": stu.class_id,
+            "class_name": ranking_cname,
+            "class_id": ranking_cid,
             "combination": combination,
             "raw_scores": raw_scores,
             "raw_total": raw_total,
@@ -522,27 +503,20 @@ def _assign_rankings(student_data: list[dict], use_conversion: bool) -> None:
 # ==================== 导出 ====================
 
 
-def export_grade_results(
-    db: Session,
-    exam_id: int,
-    use_conversion: bool = False,
-    template_id: int | None = None,
-    filter_type: str = "all",
-    filter_value: str | None = None,
-) -> bytes:
-    """导出成绩计算结果为 Excel"""
-    result = calculate_grades(db, exam_id, use_conversion, template_id)
-    students = result["students"]
+def _get_export_columns(use_conversion: bool) -> list[str]:
+    """构建导出列顺序，与页面 renderTable 完全一致"""
+    columns = ["学号", "姓名", "班级", "组合"]
+    columns += ALL_SUBJECTS
+    columns += ["原始总分", "班级排名", "组合排名"]
+    if use_conversion:
+        for subj in CONVERSION_SUBJECTS:
+            columns += [f"{subj}等级", f"{subj}赋分", f"{subj}赋分排名"]
+        columns += ["赋分总分", "赋分班级排名", "赋分组合排名"]
+    return columns
 
-    # 过滤
-    if filter_type == "class" and filter_value:
-        students = [s for s in students if s["class_name"] == filter_value]
-    elif filter_type == "combination" and filter_value:
-        students = [s for s in students if s["combination"] == filter_value]
 
-    if not students:
-        return b""
-
+def _build_student_rows(students: list[dict], use_conversion: bool, columns: list[str]) -> list[dict]:
+    """将学生数据转为行字典列表"""
     rows = []
     for s in students:
         row = {
@@ -551,7 +525,6 @@ def export_grade_results(
             "班级": s["class_name"],
             "组合": s["combination"],
         }
-        # 各科原始分
         for subj in ALL_SUBJECTS:
             row[subj] = s["raw_scores"].get(subj, "")
         row["原始总分"] = s["raw_total"]
@@ -565,13 +538,202 @@ def export_grade_results(
                     row[f"{subj}等级"] = d["tier"]
                     row[f"{subj}赋分"] = d["converted"]
                     row[f"{subj}赋分排名"] = d["rank"]
+                else:
+                    row[f"{subj}等级"] = ""
+                    row[f"{subj}赋分"] = ""
+                    row[f"{subj}赋分排名"] = ""
             row["赋分总分"] = s.get("converted_total", "")
             row["赋分班级排名"] = s.get("converted_class_rank", "")
             row["赋分组合排名"] = s.get("converted_combination_rank", "")
 
         rows.append(row)
+    return rows
 
-    df = pd.DataFrame(rows)
+
+def _apply_sheet_styling(ws, columns: list[str], rows: list[dict], use_conversion: bool):
+    """为工作表设置表头样式、列底色和列宽"""
+    from openpyxl.styles import PatternFill, Font, Alignment
+
+    fill_primary = PatternFill(start_color="DAE8FC", end_color="DAE8FC", fill_type="solid")
+    fill_info = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+    fill_success = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+
+    raw_total_cols = {"原始总分", "班级排名", "组合排名"}
+    conv_detail_cols = set()
+    conv_total_cols = {"赋分总分", "赋分班级排名", "赋分组合排名"}
+    if use_conversion:
+        for subj in CONVERSION_SUBJECTS:
+            conv_detail_cols.add(f"{subj}等级")
+            conv_detail_cols.add(f"{subj}赋分")
+            conv_detail_cols.add(f"{subj}赋分排名")
+
+    for col_idx, col_name in enumerate(columns, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx in range(2, len(rows) + 2):
+        for col_idx, col_name in enumerate(columns, 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.alignment = Alignment(horizontal="center")
+            if col_name in raw_total_cols:
+                cell.fill = fill_primary
+            elif col_name in conv_detail_cols:
+                cell.fill = fill_info
+            elif col_name in conv_total_cols:
+                cell.fill = fill_success
+
+    for col_idx, col_name in enumerate(columns, 1):
+        max_len = len(col_name)
+        for row_idx in range(2, len(rows) + 2):
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val is not None:
+                max_len = max(max_len, len(str(val)))
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 4, 20)
+
+
+def _sanitize_sheet_name(name: str) -> str:
+    """清理工作表名称，去除 Excel 不支持的字符，截断到31字符"""
+    for ch in ['\\', '/', '*', '?', ':', '[', ']']:
+        name = name.replace(ch, '_')
+    return name[:31]
+
+
+def export_grade_results(
+    db: Session,
+    exam_id: int,
+    use_conversion: bool = False,
+    template_id: int | None = None,
+    filter_type: str = "all",
+    filter_value: str | list | None = None,
+) -> bytes:
+    """
+    导出成绩计算结果为 Excel，列顺序与页面计算结果一致，带底色区分。
+    分班级/分组合导出时，每个班级/组合单独一张工作表。
+    """
+    from openpyxl import Workbook
+
+    result = calculate_grades(db, exam_id, use_conversion, template_id)
+    all_students = result["students"]
+    if not all_students:
+        return b""
+
+    columns = _get_export_columns(use_conversion)
+
+    # 分组：决定工作表结构
+    if filter_type == "class" and filter_value:
+        selected = filter_value if isinstance(filter_value, list) else [filter_value]
+        groups: dict[str, list] = {}
+        for s in all_students:
+            if s["class_name"] in selected:
+                groups.setdefault(s["class_name"], []).append(s)
+    elif filter_type == "combination" and filter_value:
+        selected = filter_value if isinstance(filter_value, list) else [filter_value]
+        groups = {}
+        for s in all_students:
+            if s["combination"] in selected:
+                groups.setdefault(s["combination"] or "未分组", []).append(s)
+    else:
+        groups = {"计算结果": all_students}
+
+    if not any(groups.values()):
+        return b""
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    for sheet_name, students in groups.items():
+        if not students:
+            continue
+        safe_name = _sanitize_sheet_name(sheet_name)
+        ws = wb.create_sheet(title=safe_name)
+        # 写表头
+        for col_idx, col_name in enumerate(columns, 1):
+            ws.cell(row=1, column=col_idx, value=col_name)
+        # 写数据
+        rows = _build_student_rows(students, use_conversion, columns)
+        for row_idx, row in enumerate(rows, 2):
+            for col_idx, col_name in enumerate(columns, 1):
+                ws.cell(row=row_idx, column=col_idx, value=row.get(col_name, ""))
+        _apply_sheet_styling(ws, columns, rows, use_conversion)
+
     output = io.BytesIO()
-    df.to_excel(output, index=False, engine="openpyxl")
+    wb.save(output)
+    return output.getvalue()
+
+
+def export_conversion_report(
+    db: Session,
+    exam_id: int,
+    template_id: int,
+) -> bytes:
+    """导出赋分报告为 Excel，每个赋分科目一张工作表"""
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment
+
+    result = calculate_grades(db, exam_id, use_conversion=True, template_id=template_id)
+    report = result.get("conversion_report", {})
+    if not report:
+        return b""
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    center = Alignment(horizontal="center")
+    tier_fills = {
+        "A": PatternFill(start_color="DAE8FC", end_color="DAE8FC", fill_type="solid"),
+        "B": PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid"),
+        "C": PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid"),
+        "D": PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid"),
+        "E": PatternFill(start_color="F5C6CB", end_color="F5C6CB", fill_type="solid"),
+    }
+
+    columns = ["学科", "等级", "比例(%)", "人数", "原始分上限", "原始分下限", "赋分区间", "赋分区间平均分"]
+
+    for subj in sorted(report.keys()):
+        tiers = report[subj]
+        safe_name = _sanitize_sheet_name(f"{subj}赋分报告")
+        ws = wb.create_sheet(title=safe_name)
+
+        # 表头
+        for col_idx, col_name in enumerate(columns, 1):
+            cell = ws.cell(row=1, column=col_idx, value=col_name)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center
+
+        # 数据行
+        for row_idx, t in enumerate(tiers, 2):
+            values = [
+                subj,
+                t["tier"],
+                t["ratio"],
+                t["count"],
+                t["raw_max"] if t["count"] > 0 else "",
+                t["raw_min"] if t["count"] > 0 else "",
+                t["score_range"],
+                t["converted_avg"] if t["count"] > 0 else "",
+            ]
+            tier_fill = tier_fills.get(t["tier"], PatternFill())
+            for col_idx, val in enumerate(values, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                cell.fill = tier_fill
+                cell.alignment = center
+
+        # 列宽
+        for col_idx, col_name in enumerate(columns, 1):
+            max_len = len(col_name)
+            for row_idx in range(2, len(tiers) + 2):
+                val = ws.cell(row=row_idx, column=col_idx).value
+                if val is not None:
+                    max_len = max(max_len, len(str(val)))
+            ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 4, 20)
+
+    output = io.BytesIO()
+    wb.save(output)
     return output.getvalue()

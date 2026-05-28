@@ -6,15 +6,64 @@
 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addExamModal">
     <i class="bi bi-journal-plus"></i> 创建考试
 </button>
+<button class="btn btn-info btn-sm" onclick="showTemplateModal()">
+    <i class="bi bi-gear"></i> 赋分模板
+</button>
+<button class="btn btn-danger btn-sm" onclick="clearAllData()">
+    <i class="bi bi-trash"></i> 清除所有数据
+</button>
 {% endblock %}
 
 {% block content %}
 <div class="card">
     <div class="card-body">
+        <!-- 搜索和筛选 -->
+        <div class="row mb-3 g-2">
+            <div class="col-md-2">
+                <select id="examTypeFilter" class="form-select form-select-sm">
+                    <option value="">全部类型</option>
+                    <option value="模考">模考</option>
+                    <option value="月考">月考</option>
+                    <option value="期中">期中</option>
+                    <option value="期末">期末</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select id="examTargetFilter" class="form-select form-select-sm">
+                    <option value="">全部对象</option>
+                    <option value="高一">高一</option>
+                    <option value="高二">高二</option>
+                    <option value="高三">高三</option>
+                    <option value="全部">全部</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="搜索考试名称...">
+            </div>
+            <div class="col-md-2">
+                <select id="sortOrder" class="form-select form-select-sm">
+                    <option value="desc">日期最新优先</option>
+                    <option value="asc">日期最早优先</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm flex-fill" onclick="resetFilters()">
+                    <i class="bi bi-arrow-repeat"></i> 重置
+                </button>
+            </div>
+        </div>
+
         <div class="table-responsive">
             <table class="table table-hover table-sm">
                 <thead>
-                    <tr><th>考试名称</th><th>日期</th><th>类型</th><th>科目数</th><th>操作</th></tr>
+                    <tr>
+                        <th>考试名称</th>
+                        <th>日期</th>
+                        <th>类型</th>
+                        <th>考试对象</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
                 </thead>
                 <tbody id="examTable"></tbody>
             </table>
@@ -22,6 +71,7 @@
     </div>
 </div>
 
+<!-- 创建考试弹窗 -->
 <div class="modal fade" id="addExamModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -36,6 +86,20 @@
                         <option value="期中">期中</option><option value="期末">期末</option>
                     </select>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">考试对象</label>
+                    <select class="form-select" id="examTarget">
+                        <option value="全部">全部</option>
+                    </select>
+                    <div class="form-text">根据学生入学年份选择</div>
+                </div>
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="examPostSplit">
+                        <label class="form-check-label" for="examPostSplit">分班后的考试</label>
+                    </div>
+                    <div class="form-text">开启后，班级排名将按分班后的新班级计算</div>
+                </div>
                 <p class="text-muted small">系统将自动创建语文、数学、英语、物理、历史、化学、生物、政治、地理 9 个科目</p>
             </div>
             <div class="modal-footer">
@@ -45,25 +109,355 @@
         </div>
     </div>
 </div>
+
+<!-- 录入成绩弹窗 -->
+<div class="modal fade" id="importScoreModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>录入成绩</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <h6><i class="bi bi-file-earmark-excel me-1"></i>Excel 导入成绩</h6>
+                    <p class="text-muted small">模板字段：学号、姓名、语文、数学、英语、物理、化学、生物、政治、历史、地理。支持灵活表头顺序，导入时自动匹配列名。</p>
+                    <input type="file" class="form-control form-control-sm mb-2" id="importFile" accept=".xlsx,.xls">
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success btn-sm flex-fill" onclick="importScores()">
+                            <i class="bi bi-file-earmark-excel"></i> 导入 Excel
+                        </button>
+                        <a href="/api/scores/template/scores" class="btn btn-outline-secondary btn-sm flex-fill">
+                            <i class="bi bi-download"></i> 下载模板
+                        </a>
+                    </div>
+                </div>
+                <hr>
+                <div id="importResultArea" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">导入结果</h6>
+                        <span class="badge bg-success" id="importSummary"></span>
+                    </div>
+                    <div id="importErrors" style="display: none;"></div>
+                    <div class="table-responsive" style="max-height: 300px; overflow: auto;">
+                        <table class="table table-sm table-hover table-striped">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th>学号</th><th>姓名</th><th>班级</th>
+                                    <th>语文</th><th>数学</th><th>英语</th>
+                                    <th>物理</th><th>化学</th><th>生物</th>
+                                    <th>政治</th><th>历史</th><th>地理</th>
+                                </tr>
+                            </thead>
+                            <tbody id="importDetailTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 成绩计算确认弹窗 -->
+<div class="modal fade" id="calcConfirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-calculator me-2"></i>成绩计算</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>请选择计算方式：</p>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="calcMode" id="calcRawOnly" value="raw" checked>
+                        <label class="form-check-label" for="calcRawOnly">
+                            <strong>仅原始分</strong> — 计算各科原始分总分及排名
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="calcMode" id="calcWithConv" value="conv">
+                        <label class="form-check-label" for="calcWithConv">
+                            <strong>原始分 + 赋分</strong> — 同时计算赋分科目成绩，支持切换查看
+                        </label>
+                    </div>
+                </div>
+                <div id="templateSelector" style="display:none;">
+                    <label class="form-label">选择赋分模板</label>
+                    <select id="calcTemplateSelect" class="form-select form-select-sm">
+                        <option value="">-- 请选择模板 --</option>
+                    </select>
+                    <div class="form-text">可点击上方"赋分模板"按钮管理模板</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmCalc" onclick="confirmCalculation()">
+                    <i class="bi bi-calculator"></i> 开始计算
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 成绩计算结果弹窗 -->
+<div class="modal fade" id="calcResultModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="calcResultTitle"><i class="bi bi-calculator me-2"></i>成绩计算结果</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="calcLoading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border text-primary me-2" role="status"></div>
+                    <span>正在计算，请稍候...</span>
+                </div>
+                <div id="calcResultContent" style="display:none;">
+                    <!-- 视图切换 -->
+                    <div class="d-flex justify-content-between align-items-center mb-3" id="viewToggle" style="display:none;">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-primary active" onclick="switchScoreView('raw')" id="btnViewRaw">
+                                <i class="bi bi-file-text"></i> 原始分
+                            </button>
+                            <button class="btn btn-outline-primary" onclick="switchScoreView('converted')" id="btnViewConverted">
+                                <i class="bi bi-arrow-repeat"></i> 赋分
+                            </button>
+                        </div>
+                        <span id="calcResultCount" class="text-muted small"></span>
+                    </div>
+                    <!-- 统计卡片 -->
+                    <div class="row g-3 mb-3" id="calcStats"></div>
+                    <!-- 结果表格 -->
+                    <div class="table-responsive" style="max-height: 50vh; overflow-y: auto;">
+                        <table class="table table-sm table-hover table-striped mb-0">
+                            <thead class="table-light sticky-top" id="calcResultHead"></thead>
+                            <tbody id="calcResultBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <a id="calcExportBtn" href="#" class="btn btn-success btn-sm"><i class="bi bi-download"></i> 导出 Excel</a>
+                <a id="calcDetailBtn" href="#" class="btn btn-primary btn-sm"><i class="bi bi-eye"></i> 查看详情</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 赋分模板弹窗 -->
+<div class="modal fade" id="templateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="templateModalTitle">赋分模板管理</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 模板列表视图 -->
+                <div id="tplListView">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted">已有模板列表</span>
+                        <button class="btn btn-primary btn-sm" onclick="showTemplateForm()">
+                            <i class="bi bi-plus-lg"></i> 新建模板
+                        </button>
+                    </div>
+                    <div id="tplListContent"></div>
+                </div>
+                <!-- 模板编辑表单视图 -->
+                <div id="tplFormView" style="display:none;">
+                    <div class="mb-3">
+                        <a href="#" class="text-decoration-none small" onclick="showTemplateList(); return false;">
+                            <i class="bi bi-arrow-left"></i> 返回列表
+                        </a>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">模板名称</label>
+                        <input type="text" class="form-control" id="tplName" placeholder="如：本校赋分模板">
+                    </div>
+                <p class="text-muted small mb-2">请设置各赋分科目的等级人数占比（%），每个科目的占比总和必须为100%</p>
+                <ul class="nav nav-tabs" id="subjectTabs">
+                    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-化学">化学</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-生物">生物</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-政治">政治</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-地理">地理</a></li>
+                </ul>
+                <div class="tab-content border border-top-0 p-3" id="subjectTabContent">
+                    <div class="tab-pane fade show active" id="tab-化学">
+                        <table class="table table-bordered table-sm mb-1">
+                            <thead><tr><th>等级</th><th>赋分区间</th><th>占比 (%)</th></tr></thead>
+                            <tbody>
+                                <tr><td><span class="badge bg-primary">A</span></td><td class="text-muted">100 ~ 86 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="化学" data-tier="A" value="15" min="0" max="100" step="0.1" oninput="updateRatioSum('化学')"></td></tr>
+                                <tr><td><span class="badge bg-success">B</span></td><td class="text-muted">85 ~ 71 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="化学" data-tier="B" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('化学')"></td></tr>
+                                <tr><td><span class="badge bg-warning text-dark">C</span></td><td class="text-muted">70 ~ 56 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="化学" data-tier="C" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('化学')"></td></tr>
+                                <tr><td><span class="badge" style="background:#E6A23C;">D</span></td><td class="text-muted">55 ~ 41 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="化学" data-tier="D" value="13" min="0" max="100" step="0.1" oninput="updateRatioSum('化学')"></td></tr>
+                                <tr><td><span class="badge bg-danger">E</span></td><td class="text-muted">40 ~ 30 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="化学" data-tier="E" value="2" min="0" max="100" step="0.1" oninput="updateRatioSum('化学')"></td></tr>
+                            </tbody>
+                            <tfoot><tr><td colspan="2" class="text-end fw-bold">合计</td><td class="fw-bold ratio-sum" data-subject-sum="化学">100.0</td></tr></tfoot>
+                        </table>
+                    </div>
+                    <div class="tab-pane fade" id="tab-生物">
+                        <table class="table table-bordered table-sm mb-1">
+                            <thead><tr><th>等级</th><th>赋分区间</th><th>占比 (%)</th></tr></thead>
+                            <tbody>
+                                <tr><td><span class="badge bg-primary">A</span></td><td class="text-muted">100 ~ 86 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="生物" data-tier="A" value="15" min="0" max="100" step="0.1" oninput="updateRatioSum('生物')"></td></tr>
+                                <tr><td><span class="badge bg-success">B</span></td><td class="text-muted">85 ~ 71 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="生物" data-tier="B" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('生物')"></td></tr>
+                                <tr><td><span class="badge bg-warning text-dark">C</span></td><td class="text-muted">70 ~ 56 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="生物" data-tier="C" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('生物')"></td></tr>
+                                <tr><td><span class="badge" style="background:#E6A23C;">D</span></td><td class="text-muted">55 ~ 41 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="生物" data-tier="D" value="13" min="0" max="100" step="0.1" oninput="updateRatioSum('生物')"></td></tr>
+                                <tr><td><span class="badge bg-danger">E</span></td><td class="text-muted">40 ~ 30 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="生物" data-tier="E" value="2" min="0" max="100" step="0.1" oninput="updateRatioSum('生物')"></td></tr>
+                            </tbody>
+                            <tfoot><tr><td colspan="2" class="text-end fw-bold">合计</td><td class="fw-bold ratio-sum" data-subject-sum="生物">100.0</td></tr></tfoot>
+                        </table>
+                    </div>
+                    <div class="tab-pane fade" id="tab-政治">
+                        <table class="table table-bordered table-sm mb-1">
+                            <thead><tr><th>等级</th><th>赋分区间</th><th>占比 (%)</th></tr></thead>
+                            <tbody>
+                                <tr><td><span class="badge bg-primary">A</span></td><td class="text-muted">100 ~ 86 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="政治" data-tier="A" value="15" min="0" max="100" step="0.1" oninput="updateRatioSum('政治')"></td></tr>
+                                <tr><td><span class="badge bg-success">B</span></td><td class="text-muted">85 ~ 71 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="政治" data-tier="B" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('政治')"></td></tr>
+                                <tr><td><span class="badge bg-warning text-dark">C</span></td><td class="text-muted">70 ~ 56 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="政治" data-tier="C" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('政治')"></td></tr>
+                                <tr><td><span class="badge" style="background:#E6A23C;">D</span></td><td class="text-muted">55 ~ 41 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="政治" data-tier="D" value="13" min="0" max="100" step="0.1" oninput="updateRatioSum('政治')"></td></tr>
+                                <tr><td><span class="badge bg-danger">E</span></td><td class="text-muted">40 ~ 30 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="政治" data-tier="E" value="2" min="0" max="100" step="0.1" oninput="updateRatioSum('政治')"></td></tr>
+                            </tbody>
+                            <tfoot><tr><td colspan="2" class="text-end fw-bold">合计</td><td class="fw-bold ratio-sum" data-subject-sum="政治">100.0</td></tr></tfoot>
+                        </table>
+                    </div>
+                    <div class="tab-pane fade" id="tab-地理">
+                        <table class="table table-bordered table-sm mb-1">
+                            <thead><tr><th>等级</th><th>赋分区间</th><th>占比 (%)</th></tr></thead>
+                            <tbody>
+                                <tr><td><span class="badge bg-primary">A</span></td><td class="text-muted">100 ~ 86 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="地理" data-tier="A" value="15" min="0" max="100" step="0.1" oninput="updateRatioSum('地理')"></td></tr>
+                                <tr><td><span class="badge bg-success">B</span></td><td class="text-muted">85 ~ 71 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="地理" data-tier="B" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('地理')"></td></tr>
+                                <tr><td><span class="badge bg-warning text-dark">C</span></td><td class="text-muted">70 ~ 56 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="地理" data-tier="C" value="35" min="0" max="100" step="0.1" oninput="updateRatioSum('地理')"></td></tr>
+                                <tr><td><span class="badge" style="background:#E6A23C;">D</span></td><td class="text-muted">55 ~ 41 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="地理" data-tier="D" value="13" min="0" max="100" step="0.1" oninput="updateRatioSum('地理')"></td></tr>
+                                <tr><td><span class="badge bg-danger">E</span></td><td class="text-muted">40 ~ 30 分</td><td><input type="number" class="form-control form-control-sm tier-input" data-subject="地理" data-tier="E" value="2" min="0" max="100" step="0.1" oninput="updateRatioSum('地理')"></td></tr>
+                            </tbody>
+                            <tfoot><tr><td colspan="2" class="text-end fw-bold">合计</td><td class="fw-bold ratio-sum" data-subject-sum="地理">100.0</td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="tplFormFooter" style="display:none;">
+                <span id="tplError" class="text-danger me-auto"></span>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveTemplate()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+const ALL_SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理'];
+const CONV_SUBJECTS = ['化学', '生物', '政治', '地理'];
+let currentImportExamId = null;
+let currentCalcExamId = null;
+let currentCalcResult = null;
+let currentScoreView = 'raw';
+let editingTemplateId = null;
+
+async function loadGradeLevels() {
+    try {
+        const levels = await apiFetch('/api/students/grade-levels');
+        const sel = document.getElementById('examTarget');
+        sel.innerHTML = '<option value="全部">全部</option>';
+        levels.forEach(l => {
+            sel.innerHTML += `<option value="${l.value}">${l.label}</option>`;
+        });
+    } catch (e) { /* 静默失败 */ }
+}
+
 async function loadExams() {
     try {
-        const exams = await apiFetch('/api/exams/');
-        document.getElementById('examTable').innerHTML = exams.map(e => `
-            <tr>
+        const examType = document.getElementById('examTypeFilter').value;
+        const examTarget = document.getElementById('examTargetFilter').value;
+        const keyword = document.getElementById('searchInput').value.trim();
+        const sortOrder = document.getElementById('sortOrder').value;
+
+        let url = '/api/exams/';
+        const params = [];
+        if (examType) params.push(`exam_type=${encodeURIComponent(examType)}`);
+        if (examTarget) params.push(`exam_target=${encodeURIComponent(examTarget)}`);
+        if (keyword) params.push(`keyword=${encodeURIComponent(keyword)}`);
+        params.push(`sort_order=${sortOrder}`);
+        url += '?' + params.join('&');
+
+        const exams = await apiFetch(url);
+        document.getElementById('examTable').innerHTML = exams.map(e => {
+            let statusHtml = '';
+            if (e.is_calculated) {
+                statusHtml = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>已计算</span>';
+            } else if (e.has_scores) {
+                statusHtml = '<span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>有待计算</span>';
+            } else {
+                statusHtml = '<span class="badge bg-secondary"><i class="bi bi-dash-circle me-1"></i>无成绩</span>';
+            }
+
+            let actionsHtml = `
+                <a href="/exams/${e.id}" class="btn btn-outline-primary btn-sm" title="查看详情">
+                    <i class="bi bi-eye"></i> 查看
+                </a>
+                <button class="btn btn-outline-secondary btn-sm" onclick="openImportModal(${e.id})" title="录入成绩">
+                    <i class="bi bi-pencil-square"></i> 录入成绩
+                </button>`;
+
+            if (e.is_calculated) {
+                actionsHtml += `
+                    <button class="btn btn-success btn-sm" onclick="viewCalcResult(${e.id})" title="查看成绩">
+                        <i class="bi bi-bar-chart-line"></i> 查看成绩
+                    </button>`;
+            } else if (e.has_scores) {
+                actionsHtml += `
+                    <button class="btn btn-warning btn-sm" onclick="openCalcConfirm(${e.id})" title="成绩计算">
+                        <i class="bi bi-calculator"></i> 成绩计算
+                    </button>`;
+            } else {
+                actionsHtml += `
+                    <button class="btn btn-outline-warning btn-sm" disabled title="请先录入成绩">
+                        <i class="bi bi-calculator"></i> 成绩计算
+                    </button>`;
+            }
+
+            actionsHtml += `
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteExam(${e.id})" title="删除">
+                    <i class="bi bi-trash"></i>
+                </button>`;
+
+            return `<tr>
                 <td><a href="/exams/${e.id}">${e.name}</a></td>
-                <td>${e.exam_date}</td><td>${e.exam_type}</td><td>${e.subject_count}</td>
-                <td>
-                    <a href="/exams/${e.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
-                    <a href="/scores/entry?exam_id=${e.id}" class="btn btn-outline-success btn-sm"><i class="bi bi-pencil"></i></a>
-                    <button class="btn btn-outline-danger btn-sm" onclick="deleteExam(${e.id})"><i class="bi bi-trash"></i></button>
-                </td>
-            </tr>
-        `).join('');
+                <td>${e.exam_date}</td>
+                <td>${e.exam_type}</td>
+                <td><span class="badge bg-secondary">${e.exam_target}</span></td>
+                <td>${statusHtml}</td>
+                <td class="text-nowrap">${actionsHtml}</td>
+            </tr>`;
+        }).join('');
     } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
+}
+
+// 筛选条件变化时重新加载
+document.getElementById('examTypeFilter').addEventListener('change', loadExams);
+document.getElementById('examTargetFilter').addEventListener('change', loadExams);
+document.getElementById('searchInput').addEventListener('input', debounce(loadExams, 300));
+document.getElementById('sortOrder').addEventListener('change', loadExams);
+
+function resetFilters() {
+    document.getElementById('examTypeFilter').value = '';
+    document.getElementById('examTargetFilter').value = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('sortOrder').value = 'desc';
+    loadExams();
+}
+
+function debounce(fn, delay) {
+    let timer;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
 }
 
 async function addExam() {
@@ -71,6 +465,8 @@ async function addExam() {
         name: document.getElementById('examName').value,
         exam_date: document.getElementById('examDate').value,
         exam_type: document.getElementById('examType').value,
+        post_split: document.getElementById('examPostSplit').checked,
+        exam_target: document.getElementById('examTarget').value,
     };
     try {
         await apiFetch('/api/exams/', {
@@ -83,7 +479,7 @@ async function addExam() {
 }
 
 async function deleteExam(id) {
-    if (!confirmDelete('确定删除考试及其所有成绩？')) return;
+    if (!await confirmDelete('确定删除考试及其所有成绩？')) return;
     try {
         await apiFetch(`/api/exams/${id}`, { method: 'DELETE' });
         showToast('删除成功', 'success');
@@ -91,6 +487,444 @@ async function deleteExam(id) {
     } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
+async function clearAllData() {
+    if (!await confirmDelete('确定清除所有数据？此操作将删除所有学生、考试、成绩数据，且不可恢复！')) return;
+    try {
+        await apiFetch('/api/exams/clear-all-data', { method: 'POST' });
+        showToast('所有数据已清除', 'success');
+        loadExams();
+    } catch (e) { showToast('清除数据失败: ' + e.message, 'error'); }
+}
+
+// ===== 录入成绩 =====
+function openImportModal(examId) {
+    currentImportExamId = examId;
+    document.getElementById('importFile').value = '';
+    document.getElementById('importResultArea').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('importScoreModal')).show();
+}
+
+async function importScores() {
+    const file = document.getElementById('importFile').files[0];
+    if (!file) { showToast('请选择文件', 'warning'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const result = await apiFetch(`/api/scores/import/scores/${currentImportExamId}`, { method: 'POST', body: formData });
+
+        const resultArea = document.getElementById('importResultArea');
+        resultArea.style.display = 'block';
+
+        const importedCount = result.imported || 0;
+        const scoresCount = result.scores_imported || 0;
+        document.getElementById('importSummary').textContent = `成功导入 ${importedCount} 名学生，${scoresCount} 条成绩`;
+
+        const errorsDiv = document.getElementById('importErrors');
+        if (result.errors && result.errors.length > 0) {
+            errorsDiv.style.display = 'block';
+            errorsDiv.innerHTML = `<div class="alert alert-warning"><strong>错误信息：</strong><ul class="mb-0">${result.errors.map(err => `<li>${err}</li>`).join('')}</ul></div>`;
+        } else {
+            errorsDiv.style.display = 'none';
+        }
+
+        const tbody = document.getElementById('importDetailTable');
+        if (result.student_details && result.student_details.length > 0) {
+            tbody.innerHTML = result.student_details.map(s => {
+                const scoreCells = ALL_SUBJECTS.map(subj => {
+                    const val = s.scores[subj];
+                    return `<td>${val !== undefined ? val : '-'}</td>`;
+                }).join('');
+                return `<tr><td>${s.student_no}</td><td>${s.name}</td><td>${s.class_name}</td>${scoreCells}</tr>`;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">无数据</td></tr>';
+        }
+
+        showToast(`成功导入 ${result.scores_imported} 条成绩`, 'success');
+        await apiFetch(`/api/exams/${currentImportExamId}/reset-calculation`, { method: 'POST' });
+        loadExams();
+    } catch (e) { showToast('导入失败: ' + e.message, 'error'); }
+}
+
+// ===== 成绩计算 =====
+function openCalcConfirm(examId) {
+    currentCalcExamId = examId;
+    document.getElementById('calcRawOnly').checked = true;
+    document.getElementById('templateSelector').style.display = 'none';
+    // 加载赋分模板列表
+    loadTemplatesForCalc();
+    new bootstrap.Modal(document.getElementById('calcConfirmModal')).show();
+    // 赋分模式切换
+    document.querySelectorAll('input[name="calcMode"]').forEach(r => {
+        r.onchange = () => {
+            document.getElementById('templateSelector').style.display =
+                document.getElementById('calcWithConv').checked ? '' : 'none';
+        };
+    });
+}
+
+async function loadTemplatesForCalc() {
+    try {
+        const templates = await apiFetch('/api/grade-calc/templates');
+        const sel = document.getElementById('calcTemplateSelect');
+        sel.innerHTML = '<option value="">-- 请选择模板 --</option>';
+        templates.forEach(t => {
+            sel.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+        });
+    } catch (e) { /* 静默失败 */ }
+}
+
+async function confirmCalculation() {
+    const mode = document.querySelector('input[name="calcMode"]:checked').value;
+    const templateId = mode === 'conv' ? document.getElementById('calcTemplateSelect').value : null;
+
+    if (mode === 'conv' && !templateId) {
+        showToast('请选择赋分模板', 'warning');
+        return;
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById('calcConfirmModal')).hide();
+
+    // 显示结果弹窗
+    document.getElementById('calcLoading').style.display = '';
+    document.getElementById('calcResultContent').style.display = 'none';
+    document.getElementById('calcResultTitle').innerHTML = '<i class="bi bi-calculator me-2"></i>成绩计算中...';
+    new bootstrap.Modal(document.getElementById('calcResultModal')).show();
+
+    try {
+        const body = {};
+        if (templateId) body.template_id = parseInt(templateId);
+        const result = await apiFetch(`/api/exams/${currentCalcExamId}/calculate`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        currentCalcResult = result;
+        currentScoreView = 'raw';
+        renderCalcResult(result, currentCalcExamId);
+        showToast('成绩计算完成', 'success');
+        loadExams();
+    } catch (e) {
+        showToast('计算失败: ' + e.message, 'error');
+        bootstrap.Modal.getInstance(document.getElementById('calcResultModal')).hide();
+    }
+}
+
+// ===== 查看成绩 =====
+async function viewCalcResult(examId) {
+    document.getElementById('calcLoading').style.display = '';
+    document.getElementById('calcResultContent').style.display = 'none';
+    document.getElementById('calcResultTitle').innerHTML = '<i class="bi bi-bar-chart-line me-2"></i>加载中...';
+    new bootstrap.Modal(document.getElementById('calcResultModal')).show();
+
+    try {
+        const result = await apiFetch(`/api/exams/${examId}/calc-result`);
+        currentCalcResult = result;
+        currentScoreView = 'raw';
+        renderCalcResult(result, examId);
+    } catch (e) {
+        showToast('加载失败: ' + e.message, 'error');
+        bootstrap.Modal.getInstance(document.getElementById('calcResultModal')).hide();
+    }
+}
+
+function renderCalcResult(result, examId) {
+    document.getElementById('calcLoading').style.display = 'none';
+    document.getElementById('calcResultContent').style.display = '';
+    document.getElementById('calcResultTitle').innerHTML = `<i class="bi bi-bar-chart-line me-2"></i>${result.exam_name} - 成绩计算结果`;
+
+    const students = result.students || [];
+    const hasConversion = result.use_conversion && students.some(s => s.conversion_details && Object.keys(s.conversion_details).length > 0);
+
+    // 显示/隐藏视图切换
+    const toggleDiv = document.getElementById('viewToggle');
+    if (hasConversion) {
+        toggleDiv.style.display = '';
+        switchScoreView('raw');
+    } else {
+        toggleDiv.style.display = 'none';
+    }
+
+    renderStats(students, 'raw');
+    renderTable(students, 'raw', hasConversion);
+    document.getElementById('calcResultCount').textContent = `共 ${students.length} 名学生`;
+    document.getElementById('calcExportBtn').href = `/api/scores/export/${examId}`;
+    document.getElementById('calcDetailBtn').href = `/exams/${examId}`;
+}
+
+function switchScoreView(view) {
+    currentScoreView = view;
+    if (!currentCalcResult) return;
+    const students = currentCalcResult.students || [];
+    const hasConversion = currentCalcResult.use_conversion && students.some(s => s.conversion_details && Object.keys(s.conversion_details).length > 0);
+
+    document.getElementById('btnViewRaw').className = view === 'raw' ? 'btn btn-primary active' : 'btn btn-outline-primary';
+    document.getElementById('btnViewConverted').className = view === 'converted' ? 'btn btn-primary active' : 'btn btn-outline-primary';
+
+    renderStats(students, view);
+    renderTable(students, view, hasConversion);
+}
+
+function renderStats(students, view) {
+    const statsDiv = document.getElementById('calcStats');
+    if (students.length === 0) {
+        statsDiv.innerHTML = '<div class="col-12"><div class="alert alert-info mb-0">暂无成绩数据</div></div>';
+        return;
+    }
+
+    let totals, label;
+    if (view === 'converted') {
+        totals = students.map(s => s.converted_total || 0).filter(t => t > 0);
+        label = '赋分总分';
+    } else {
+        totals = students.map(s => s.raw_total).filter(t => t > 0);
+        label = '原始总分';
+    }
+    const avg = totals.length > 0 ? (totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(1) : 0;
+    const max = totals.length > 0 ? Math.max(...totals) : 0;
+    const min = totals.length > 0 ? Math.min(...totals) : 0;
+
+    statsDiv.innerHTML = `
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="stat-icon" style="background:rgba(74,144,217,0.1);color:#4A90D9;"><i class="bi bi-people"></i></div>
+                <div class="stat-value">${students.length}</div>
+                <div class="stat-label">参考人数</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="stat-icon" style="background:rgba(103,194,58,0.1);color:#67C23A;"><i class="bi bi-graph-up"></i></div>
+                <div class="stat-value">${avg}</div>
+                <div class="stat-label">${label}均分</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="stat-icon" style="background:rgba(230,162,60,0.1);color:#E6A23C;"><i class="bi bi-award"></i></div>
+                <div class="stat-value">${max}</div>
+                <div class="stat-label">最高${label}</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="stat-icon" style="background:rgba(245,108,108,0.1);color:#F56C6C;"><i class="bi bi-arrow-down"></i></div>
+                <div class="stat-value">${min}</div>
+                <div class="stat-label">最低${label}</div>
+            </div>
+        </div>`;
+}
+
+function renderTable(students, view, hasConversion) {
+    let sortField, rankField;
+    if (view === 'converted' && hasConversion) {
+        sortField = 'converted_total';
+        rankField = 'converted_class_rank';
+    } else {
+        sortField = 'raw_total';
+        rankField = 'class_rank';
+    }
+
+    // 表头
+    let headHtml = '<tr><th>排名</th><th>学号</th><th>姓名</th><th>班级</th><th>组合</th>';
+    if (view === 'converted' && hasConversion) {
+        // 赋分视图：显示赋分科目成绩
+        ALL_SUBJECTS.forEach(subj => {
+            if (CONV_SUBJECTS.includes(subj)) {
+                headHtml += `<th class="table-info">${subj}(赋分)</th>`;
+            } else {
+                headHtml += `<th>${subj}</th>`;
+            }
+        });
+        headHtml += '<th class="table-success">赋分总分</th><th class="table-success">班级排名</th><th class="table-success">组合排名</th>';
+    } else {
+        ALL_SUBJECTS.forEach(subj => { headHtml += `<th>${subj}</th>`; });
+        headHtml += '<th class="table-primary">原始总分</th><th class="table-primary">班级排名</th><th class="table-primary">组合排名</th>';
+    }
+    headHtml += '</tr>';
+    document.getElementById('calcResultHead').innerHTML = headHtml;
+
+    // 排序
+    const sorted = [...students].sort((a, b) => (b[sortField] || 0) - (a[sortField] || 0));
+
+    // 表体
+    let bodyHtml = '';
+    sorted.forEach((s, idx) => {
+        bodyHtml += '<tr>';
+        bodyHtml += `<td>${idx + 1}</td>`;
+        bodyHtml += `<td>${s.student_no}</td><td>${s.student_name}</td><td>${s.class_name}</td><td>${s.combination || '-'}</td>`;
+
+        if (view === 'converted' && hasConversion) {
+            ALL_SUBJECTS.forEach(subj => {
+                if (CONV_SUBJECTS.includes(subj) && s.conversion_details && s.conversion_details[subj]) {
+                    const d = s.conversion_details[subj];
+                    bodyHtml += `<td class="table-info"><span class="badge bg-${tierBadgeColor(d.tier)}">${d.tier}</span> ${d.converted}</td>`;
+                } else {
+                    const val = s.raw_scores[subj];
+                    bodyHtml += `<td>${val != null ? val : '-'}</td>`;
+                }
+            });
+            bodyHtml += `<td class="fw-bold table-success">${s.converted_total || '-'}</td>`;
+            bodyHtml += `<td class="table-success">${s.converted_class_rank || '-'}</td>`;
+            bodyHtml += `<td class="table-success">${s.converted_combination_rank || '-'}</td>`;
+        } else {
+            ALL_SUBJECTS.forEach(subj => {
+                const val = s.raw_scores[subj];
+                bodyHtml += `<td>${val != null ? val : '-'}</td>`;
+            });
+            bodyHtml += `<td class="fw-bold table-primary">${s.raw_total}</td>`;
+            bodyHtml += `<td class="table-primary">${s.class_rank || '-'}</td>`;
+            bodyHtml += `<td class="table-primary">${s.combination_rank || '-'}</td>`;
+        }
+        bodyHtml += '</tr>';
+    });
+    document.getElementById('calcResultBody').innerHTML = bodyHtml;
+}
+
+function tierBadgeColor(tier) {
+    if (!tier) return 'secondary';
+    const c = tier.charAt(0);
+    return {A:'primary', B:'success', C:'warning text-dark', D:'', E:'danger'}[c] || 'secondary';
+}
+
+// ===== 赋分模板管理 =====
+function showTemplateModal() {
+    editingTemplateId = null;
+    document.getElementById('tplError').textContent = '';
+    showTemplateList();
+    new bootstrap.Modal(document.getElementById('templateModal')).show();
+}
+
+function showTemplateList() {
+    document.getElementById('tplListView').style.display = '';
+    document.getElementById('tplFormView').style.display = 'none';
+    document.getElementById('templateModalTitle').textContent = '赋分模板管理';
+    document.getElementById('tplFormFooter').style.display = 'none';
+    loadTemplateList();
+}
+
+function showTemplateForm(tplData) {
+    document.getElementById('tplListView').style.display = 'none';
+    document.getElementById('tplFormView').style.display = '';
+    document.getElementById('tplFormFooter').style.display = '';
+    editingTemplateId = tplData ? tplData.id : null;
+    document.getElementById('templateModalTitle').textContent = tplData ? '编辑赋分模板' : '新建赋分模板';
+    document.getElementById('tplName').value = tplData ? tplData.name : '';
+    document.getElementById('tplError').textContent = '';
+    const defaultRatios = {A:15, B:35, C:35, D:13, E:2};
+    const allRatios = tplData ? {...tplData.tier_ratios} : {};
+    CONV_SUBJECTS.forEach(subj => {
+        if (!allRatios[subj]) allRatios[subj] = {...defaultRatios};
+    });
+    document.querySelectorAll('.tier-input').forEach(inp => {
+        const subj = inp.dataset.subject;
+        const tier = inp.dataset.tier;
+        inp.value = (allRatios[subj] && allRatios[subj][tier]) || 0;
+    });
+    CONV_SUBJECTS.forEach(subj => updateRatioSum(subj));
+    const firstTab = document.querySelector('#subjectTabs .nav-link');
+    if (firstTab) new bootstrap.Tab(firstTab).show();
+}
+
+async function loadTemplateList() {
+    try {
+        const templates = await apiFetch('/api/grade-calc/templates');
+        const container = document.getElementById('tplListContent');
+        if (templates.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted py-3">暂无模板，请点击上方按钮创建</div>';
+            return;
+        }
+        container.innerHTML = templates.map(t => `
+            <div class="card mb-2">
+                <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-text me-2"></i>${t.name}</span>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="editTemplateById(${t.id})" title="编辑">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteTemplate(${t.id})" title="删除">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById('tplListContent').innerHTML = '<div class="text-danger">加载失败</div>';
+    }
+}
+
+async function editTemplateById(tplId) {
+    try {
+        const tpl = await apiFetch(`/api/grade-calc/templates/${tplId}`);
+        showTemplateForm(tpl);
+    } catch (e) {
+        showToast('加载模板失败: ' + e.message, 'error');
+    }
+}
+
+async function deleteTemplate(tplId) {
+    if (!await confirmDelete('确定删除此赋分模板？')) return;
+    try {
+        await apiFetch(`/api/grade-calc/templates/${tplId}`, { method: 'DELETE' });
+        showToast('模板已删除', 'success');
+        loadTemplateList();
+        loadTemplatesForCalc();
+    } catch (e) {
+        showToast('删除失败: ' + e.message, 'error');
+    }
+}
+
+function updateRatioSum(subj) {
+    let sum = 0;
+    document.querySelectorAll(`.tier-input[data-subject="${subj}"]`).forEach(inp => { sum += parseFloat(inp.value) || 0; });
+    const el = document.querySelector(`[data-subject-sum="${subj}"]`);
+    if (el) {
+        el.textContent = sum.toFixed(1);
+        el.className = Math.abs(sum - 100) < 0.01 ? 'fw-bold text-success ratio-sum' : 'fw-bold text-danger ratio-sum';
+    }
+}
+
+async function saveTemplate() {
+    const name = document.getElementById('tplName').value.trim();
+    if (!name) { document.getElementById('tplError').textContent = '请输入模板名称'; return; }
+    const tierRatios = {};
+    for (const subj of CONV_SUBJECTS) {
+        const subjRatios = {};
+        document.querySelectorAll(`.tier-input[data-subject="${subj}"]`).forEach(inp => {
+            subjRatios[inp.dataset.tier] = parseFloat(inp.value) || 0;
+        });
+        const total = Object.values(subjRatios).reduce((a, b) => a + b, 0);
+        if (Math.abs(total - 100) > 0.01) {
+            document.getElementById('tplError').textContent = `科目「${subj}」占比总和必须为100%，当前为${total.toFixed(1)}%`;
+            return;
+        }
+        tierRatios[subj] = subjRatios;
+    }
+    try {
+        if (editingTemplateId) {
+            await apiFetch(`/api/grade-calc/templates/${editingTemplateId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, tier_ratios: tierRatios}),
+            });
+        } else {
+            await apiFetch('/api/grade-calc/templates', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, tier_ratios: tierRatios}),
+            });
+        }
+        showToast(editingTemplateId ? '模板已更新' : '模板已创建', 'success');
+        loadTemplatesForCalc();
+        showTemplateList();
+    } catch (e) {
+        document.getElementById('tplError').textContent = e.message || '保存失败';
+    }
+}
+
+loadGradeLevels();
 loadExams();
 </script>
 {% endblock %}

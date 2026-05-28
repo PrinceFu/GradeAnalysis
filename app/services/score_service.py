@@ -8,28 +8,8 @@ from sqlalchemy import func
 from app.models.score import Score
 from app.models.exam import ExamSubject
 from app.models.student import Student
-from app.services.conversion_service import CONVERSION_SUBJECTS, convert_scores_for_subject
-
-# 组合 -> 科目列表映射
-COMBINATION_SUBJECTS = {
-    "物化生": ["语文", "数学", "英语", "物理", "化学", "生物"],
-    "物化政": ["语文", "数学", "英语", "物理", "化学", "政治"],
-    "物化地": ["语文", "数学", "英语", "物理", "化学", "地理"],
-    "物生政": ["语文", "数学", "英语", "物理", "生物", "政治"],
-    "物生地": ["语文", "数学", "英语", "物理", "生物", "地理"],
-    "物政地": ["语文", "数学", "英语", "物理", "政治", "地理"],
-    "史政地": ["语文", "数学", "英语", "历史", "政治", "地理"],
-    "史化政": ["语文", "数学", "英语", "历史", "化学", "政治"],
-    "史化地": ["语文", "数学", "英语", "历史", "化学", "地理"],
-    "史生政": ["语文", "数学", "英语", "历史", "生物", "政治"],
-    "史生地": ["语文", "数学", "英语", "历史", "生物", "地理"],
-    "史化生": ["语文", "数学", "英语", "历史", "化学", "生物"],
-}
-
-ALL_SUBJECTS = ["语文", "数学", "英语", "物理", "化学", "生物", "政治", "历史", "地理"]
-
-# 需要赋分的科目
-CONVERSION_SET = {"化学", "生物", "政治", "地理"}
+from app.services.conversion_service import convert_scores_for_subject
+from app.constants import COMBINATION_SUBJECTS, ALL_SUBJECTS, CONVERSION_SUBJECTS
 
 
 def _get_subjects_for_student(student: Student) -> list[str]:
@@ -53,7 +33,7 @@ def _calc_student_total(student: Student, es_map: dict, score_getter) -> dict | 
             continue
         score = score_getter(student.id, es_map[subj].id)
         if score:
-            if subj in CONVERSION_SET and score.converted_score is not None:
+            if subj in CONVERSION_SUBJECTS and score.converted_score is not None:
                 val = score.converted_score
             else:
                 val = score.raw_score
@@ -66,6 +46,7 @@ def _calc_student_total(student: Student, es_map: dict, score_getter) -> dict | 
     return {
         "student_id": student.id,
         "student_name": student.name,
+        "class_id": student.class_id,
         "scores": scores_detail,
         "total": round(total, 1),
     }

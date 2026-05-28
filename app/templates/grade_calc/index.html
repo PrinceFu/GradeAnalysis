@@ -65,6 +65,9 @@
                             <li><a class="dropdown-item" href="#" onclick="exportResults('combination')">分组合导出</a></li>
                         </ul>
                     </div>
+                    <button class="btn btn-outline-success" id="btnExportReport" onclick="exportReport()" style="display:none;">
+                        <i class="bi bi-file-earmark-bar-graph"></i> 导出赋分报告
+                    </button>
                 </div>
             </div>
         </div>
@@ -276,6 +279,40 @@
         </div>
     </div>
 </div>
+
+<!-- 导出选择弹窗 -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportModalTitle">导出选项</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="exportClassSection" style="display:none;">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="exportClassAll" checked onchange="toggleSelectAll('exportClassSection', 'exportClassAll')">
+                        <label class="form-check-label fw-bold" for="exportClassAll">全选</label>
+                    </div>
+                    <hr class="my-2">
+                    <div id="exportClassOptions" class="row"></div>
+                </div>
+                <div id="exportComboSection" style="display:none;">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="exportComboAll" checked onchange="toggleSelectAll('exportComboSection', 'exportComboAll')">
+                        <label class="form-check-label fw-bold" for="exportComboAll">全选</label>
+                    </div>
+                    <hr class="my-2">
+                    <div id="exportComboOptions" class="row"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="confirmExport()">确认导出</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -432,9 +469,11 @@ async function runCalculation() {
             renderConversionReport(currentData.conversion_report);
             document.getElementById('reportCard').style.display = '';
             document.getElementById('notesCard').style.display = '';
+            document.getElementById('btnExportReport').style.display = '';
         } else {
             document.getElementById('reportCard').style.display = 'none';
             document.getElementById('notesCard').style.display = 'none';
+            document.getElementById('btnExportReport').style.display = 'none';
         }
     } catch (e) {
         showToast('计算失败: ' + (e.message || '未知错误'), 'danger');
@@ -562,27 +601,74 @@ function renderConversionReport(report) {
     document.getElementById('reportContent').innerHTML = html;
 }
 
-async function exportResults(filterType) {
+let currentExportType = null;
+
+function exportResults(filterType) {
+    if (!currentData) return;
+    currentExportType = filterType;
+
+    const classSection = document.getElementById('exportClassSection');
+    const comboSection = document.getElementById('exportComboSection');
+    classSection.style.display = 'none';
+    comboSection.style.display = 'none';
+
+    if (filterType === 'class') {
+        document.getElementById('exportModalTitle').textContent = '分班级导出';
+        const classes = [...new Set(currentData.students.map(s => s.class_name))].sort();
+        const container = document.getElementById('exportClassOptions');
+        container.innerHTML = '';
+        classes.forEach(c => {
+            const col = document.createElement('div');
+            col.className = 'col-6 mb-1';
+            col.innerHTML = `<div class="form-check"><input class="form-check-input export-class-cb" type="checkbox" value="${c}" id="ecb_${c}" checked><label class="form-check-label" for="ecb_${c}">${c}</label></div>`;
+            container.appendChild(col);
+        });
+        document.getElementById('exportClassAll').checked = true;
+        classSection.style.display = '';
+    } else if (filterType === 'combination') {
+        document.getElementById('exportModalTitle').textContent = '分组合导出';
+        const combos = [...new Set(currentData.students.map(s => s.combination).filter(Boolean))].sort();
+        const container = document.getElementById('exportComboOptions');
+        container.innerHTML = '';
+        combos.forEach(c => {
+            const col = document.createElement('div');
+            col.className = 'col-6 mb-1';
+            col.innerHTML = `<div class="form-check"><input class="form-check-input export-combo-cb" type="checkbox" value="${c}" id="ccb_${c}" checked><label class="form-check-label" for="ccb_${c}">${c}</label></div>`;
+            container.appendChild(col);
+        });
+        document.getElementById('exportComboAll').checked = true;
+        comboSection.style.display = '';
+    }
+
+    new bootstrap.Modal(document.getElementById('exportModal')).show();
+}
+
+function toggleSelectAll(sectionId, allId) {
+    const checked = document.getElementById(allId).checked;
+    const cbs = document.getElementById(sectionId).querySelectorAll('input[type="checkbox"]:not(#' + allId + ')');
+    cbs.forEach(cb => { cb.checked = checked; });
+}
+
+async function confirmExport() {
     if (!currentData) return;
     const body = {
         exam_id: currentData.exam_id,
         use_conversion: currentData.use_conversion,
-        filter: filterType,
+        filter: currentExportType,
     };
     if (currentData.template) body.template_id = currentData.template.id;
 
-    // 如果是分班级或分组合，弹出选择
-    if (filterType === 'class') {
-        const classes = [...new Set(currentData.students.map(s => s.class_name))].sort();
-        const val = prompt('请输入要导出的班级名称:\n' + classes.join(', '));
-        if (!val) return;
-        body.filter_value = val;
-    } else if (filterType === 'combination') {
-        const combos = [...new Set(currentData.students.map(s => s.combination).filter(Boolean))].sort();
-        const val = prompt('请输入要导出的组合名称:\n' + combos.join(', '));
-        if (!val) return;
-        body.filter_value = val;
+    if (currentExportType === 'class') {
+        const selected = [...document.querySelectorAll('.export-class-cb:checked')].map(cb => cb.value);
+        if (selected.length === 0) { showToast('请至少选择一个班级', 'warning'); return; }
+        body.filter_values = selected;
+    } else if (currentExportType === 'combination') {
+        const selected = [...document.querySelectorAll('.export-combo-cb:checked')].map(cb => cb.value);
+        if (selected.length === 0) { showToast('请至少选择一个组合', 'warning'); return; }
+        body.filter_values = selected;
     }
+
+    bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
 
     try {
         const resp = await fetch('/api/grade-calc/export', {
@@ -591,17 +677,55 @@ async function exportResults(filterType) {
             body: JSON.stringify(body),
         });
         if (!resp.ok) {
-            const err = await resp.json();
-            throw new Error(err.detail || '导出失败');
+            let msg = '导出失败';
+            try {
+                const err = await resp.json();
+                msg = err.detail || msg;
+            } catch {
+                msg = `服务器错误 (${resp.status})`;
+            }
+            throw new Error(msg);
         }
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `成绩计算_${currentData.exam_name}${filterType !== 'all' ? '_' + (body.filter_value || filterType) : ''}.xlsx`;
+        const suffix = currentExportType === 'all' ? '' : '_筛选导出';
+        a.download = `成绩计算_${currentData.exam_name}${suffix}.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
         showToast('导出成功', 'success');
+    } catch (e) {
+        showToast('导出失败: ' + e.message, 'danger');
+    }
+}
+
+async function exportReport() {
+    if (!currentData || !currentData.use_conversion || !currentData.template) return;
+    try {
+        const resp = await fetch('/api/grade-calc/export-report', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ exam_id: currentData.exam_id, template_id: currentData.template.id }),
+        });
+        if (!resp.ok) {
+            let msg = '导出失败';
+            try {
+                const err = await resp.json();
+                msg = err.detail || msg;
+            } catch {
+                msg = `服务器错误 (${resp.status})`;
+            }
+            throw new Error(msg);
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `赋分报告_${currentData.exam_name}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('赋分报告导出成功', 'success');
     } catch (e) {
         showToast('导出失败: ' + e.message, 'danger');
     }

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}班级对比{% endblock %}
-{% block breadcrumb %}<li class="breadcrumb-item active">班级对比</li>{% endblock %}
+{% block title %}班级分析{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item"><a href="/analysis/single/class" class="text-decoration-none">单次考试分析</a></li><li class="breadcrumb-item active">班级分析</li>{% endblock %}
 
 {% block content %}
 <div class="card mb-4">
@@ -49,12 +49,24 @@ async function loadExams() {
         const exams = await apiFetch('/api/exams/');
         const select = document.getElementById('examSelect');
         exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+
+        // 从URL参数或sessionStorage获取考试ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const examIdFromUrl = urlParams.get('exam_id');
+        const examIdFromStorage = sessionStorage.getItem('selectedExamId');
+        const examId = examIdFromUrl || examIdFromStorage;
+
+        if (examId) {
+            select.value = examId;
+            loadClassComparison();
+        }
     } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
 }
 
 async function loadClassComparison() {
     const examId = document.getElementById('examSelect').value;
     if (!examId) return;
+    sessionStorage.setItem('selectedExamId', examId);
     try {
         const data = await apiFetch(`/api/analysis/class-comparison/${examId}`);
         if (data.length === 0) { showToast('暂无数据', 'info'); return; }

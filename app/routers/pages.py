@@ -22,7 +22,6 @@ def index(request: Request, current_user=Depends(require_user), db: Session = De
 def students_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="students/list.html", request=request)
 
-
 @router.get("/students/{student_id}", response_class=HTMLResponse)
 def student_detail_page(request: Request, student_id: int, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="students/detail.html", request=request, context={"student_id": student_id})
@@ -38,31 +37,26 @@ def exam_detail_page(request: Request, exam_id: int, current_user=Depends(requir
     return templates.TemplateResponse(name="exams/detail.html", request=request, context={"exam_id": exam_id})
 
 
-@router.get("/scores/entry", response_class=HTMLResponse)
-def score_entry_page(request: Request, current_user=Depends(require_user)):
-    return templates.TemplateResponse(name="scores/entry.html", request=request)
-
-
-@router.get("/grade-calc", response_class=HTMLResponse)
-def grade_calc_page(request: Request, current_user=Depends(require_user)):
-    return templates.TemplateResponse(name="grade_calc/index.html", request=request)
-
-
-@router.get("/analysis/grade", response_class=HTMLResponse)
+@router.get("/analysis/single/grade", response_class=HTMLResponse)
 def grade_analysis_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="analysis/grade.html", request=request)
 
 
-@router.get("/analysis/class", response_class=HTMLResponse)
+@router.get("/analysis/single/class", response_class=HTMLResponse)
 def class_analysis_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="analysis/class.html", request=request)
 
 
-@router.get("/analysis/subject", response_class=HTMLResponse)
-def subject_analysis_page(request: Request, current_user=Depends(require_user)):
-    return templates.TemplateResponse(name="analysis/subject.html", request=request)
+@router.get("/analysis/single/student", response_class=HTMLResponse)
+def student_analysis_page(request: Request, current_user=Depends(require_user)):
+    return templates.TemplateResponse(name="analysis/single_student.html", request=request)
 
 
-@router.get("/analysis/longitudinal", response_class=HTMLResponse)
-def longitudinal_page(request: Request, current_user=Depends(require_user)):
+@router.get("/analysis/multi", response_class=HTMLResponse)
+def multi_exam_page(request: Request, current_user=Depends(require_user)):
+    return templates.TemplateResponse(name="analysis/multi_exam.html", request=request)
+
+
+@router.get("/analysis/tracking", response_class=HTMLResponse)
+def tracking_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse(name="analysis/longitudinal.html", request=request)

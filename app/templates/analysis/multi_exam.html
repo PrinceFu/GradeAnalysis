@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}多次考试分析{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">多次考试分析</li>{% endblock %}
+
+{% block content %}
+<!-- 考试选择 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <label class="form-label fw-bold">选择考试（可多选）</label>
+                <div id="examCheckboxes" class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                    <div class="text-muted">加载中...</div>
+                </div>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="loadMultiExamAnalysis()">
+                    <i class="bi bi-search me-1"></i> 开始分析
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 年级均分趋势 -->
+<div class="card mb-4" id="avgTrendCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-graph-up me-2"></i>年级各科均分趋势</div>
+    <div class="card-body"><div id="chart-avg-trend" style="height: 400px;"></div></div>
+</div>
+
+<!-- 及格率趋势 -->
+<div class="card mb-4" id="rateTrendCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-percent me-2"></i>及格率/优秀率趋势</div>
+    <div class="card-body"><div id="chart-rate-trend" style="height: 400px;"></div></div>
+</div>
+
+<!-- 总分均分趋势 -->
+<div class="card mb-4" id="totalTrendCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-bar-chart me-2"></i>总分均分对比</div>
+    <div class="card-body"><div id="chart-total-trend" style="height: 350px;"></div></div>
+</div>
+
+<!-- 详细数据表 -->
+<div class="card mb-4" id="detailTableCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-table me-2"></i>各次考试详细数据</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover" id="detailTable"></table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
+let allExams = [];
+
+async function loadExams() {
+    try {
+        allExams = await apiFetch('/api/exams/');
+        const container = document.getElementById('examCheckboxes');
+        if (allExams.length === 0) {
+            container.innerHTML = '<div class="text-muted">暂无考试数据</div>';
+            return;
+        }
+        let html = '';
+        allExams.forEach((e, i) => {
+            html += `<div class="form-check">
+                <input class="form-check-input" type="checkbox" value="${e.id}" id="exam-${e.id}" ${i === 0 ? 'checked' : ''}>
+                <label class="form-check-label" for="exam-${e.id}">${e.name}</label>
+            </div>`;
+        });
+        container.innerHTML = html;
+    } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
+}
+
+async function loadMultiExamAnalysis() {
+    const checkboxes = document.querySelectorAll('#examCheckboxes input[type=checkbox]:checked');
+    const examIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (examIds.length < 2) {
+        showToast('请至少选择两个考试进行对比', 'warning');
+        return;
+    }
+
+    try {
+        // 并行获取所有选中考试的数据
+        const allData = await Promise.all(
+            examIds.map(id => apiFetch(`/api/analysis/grade/${id}`))
+        );
+
+        // 按考试顺序排列
+        const examNames = examIds.map(id => {
+            const exam = allExams.find(e => e.id === id);
+            return exam ? exam.name : `考试${id}`;
+        });
+
+        // 渲染图表
+        renderAvgTrend(examNames, allData);
+        renderRateTrend(examNames, allData);
+        renderTotalTrend(examNames, allData);
+        renderDetailTable(examNames, allData);
+
+    } catch (e) { showToast('加载分析数据失败: ' + e.message, 'error'); }
+}
+
+function renderAvgTrend(examNames, allData) {
+    const card = document.getElementById('avgTrendCard');
+    card.style.display = '';
+
+    // 收集所有科目
+    const allSubjects = new Set();
+    allData.forEach(d => Object.keys(d.subjects || {}).forEach(s => allSubjects.add(s)));
+    const subjects = [...allSubjects];
+
+    const chart = echarts.init(document.getElementById('chart-avg-trend'));
+    chart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: subjects, bottom: 0, type: 'scroll' },
+        grid: { left: 60, right: 20, top: 20, bottom: 60 },
+        xAxis: { type: 'category', data: examNames },
+        yAxis: { type: 'value', name: '均分' },
+        series: subjects.map((subj, i) => ({
+            name: subj,
+            type: 'line',
+            smooth: true,
+            data: allData.map(d => d.subjects[subj] ? d.subjects[subj].average : null),
+            lineStyle: { color: COLORS[i % COLORS.length] },
+            itemStyle: { color: COLORS[i % COLORS.length] }
+        }))
+    });
+}
+
+function renderRateTrend(examNames, allData) {
+    const card = document.getElementById('rateTrendCard');
+    card.style.display = '';
+
+    const allSubjects = new Set();
+    allData.forEach(d => Object.keys(d.subjects || {}).forEach(s => allSubjects.add(s)));
+    const subjects = [...allSubjects];
+
+    const chart = echarts.init(document.getElementById('chart-rate-trend'));
+
+    // 及格率趋势
+    const passSeries = subjects.map((subj, i) => ({
+        name: `${subj}(及格率)`,
+        type: 'line',
+        smooth: true,
+        data: allData.map(d => d.subjects[subj] ? d.subjects[subj].pass_rate : null),
+        lineStyle: { color: COLORS[i % COLORS.length] },
+        itemStyle: { color: COLORS[i % COLORS.length] }
+    }));
+
+    // 优秀率趋势
+    const excellentSeries = subjects.map((subj, i) => ({
+        name: `${subj}(优秀率)`,
+        type: 'line',
+        smooth: true,
+        lineStyle: { color: COLORS[i % COLORS.length], type: 'dashed' },
+        itemStyle: { color: COLORS[i % COLORS.length] },
+        data: allData.map(d => d.subjects[subj] ? d.subjects[subj].excellent_rate : null)
+    }));
+
+    chart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: [...passSeries, ...excellentSeries].map(s => s.name), bottom: 0, type: 'scroll' },
+        grid: { left: 60, right: 20, top: 20, bottom: 80 },
+        xAxis: { type: 'category', data: examNames },
+        yAxis: { type: 'value', name: '%', max: 100 },
+        series: [...passSeries, ...excellentSeries]
+    });
+}
+
+function renderTotalTrend(examNames, allData) {
+    const card = document.getElementById('totalTrendCard');
+    card.style.display = '';
+
+    const chart = echarts.init(document.getElementById('chart-total-trend'));
+    chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 60, right: 20, top: 20, bottom: 40 },
+        xAxis: { type: 'category', data: examNames },
+        yAxis: { type: 'value', name: '总分均分' },
+        series: [{
+            type: 'bar',
+            data: allData.map((d, i) => ({
+                value: d.total ? d.total.average : 0,
+                itemStyle: { color: COLORS[i % COLORS.length] }
+            })),
+            label: { show: true, position: 'top', formatter: '{c}' }
+        }]
+    });
+}
+
+function renderDetailTable(examNames, allData) {
+    const card = document.getElementById('detailTableCard');
+    card.style.display = '';
+
+    const allSubjects = new Set();
+    allData.forEach(d => Object.keys(d.subjects || {}).forEach(s => allSubjects.add(s)));
+    const subjects = [...allSubjects];
+
+    let html = '<thead><tr><th>科目</th>';
+    examNames.forEach(n => html += `<th colspan="3" class="text-center">${n}</th>`);
+    html += '</tr><tr><th></th>';
+    examNames.forEach(() => html += '<th class="text-center">均分</th><th class="text-center">及格率</th><th class="text-center">优秀率</th>');
+    html += '</tr></thead><tbody>';
+
+    // 各科数据
+    for (const subj of subjects) {
+        html += `<tr><td><strong>${subj}</strong></td>`;
+        allData.forEach(d => {
+            const s = d.subjects[subj];
+            if (s) {
+                html += `<td class="text-center">${s.average}</td>`;
+                html += `<td class="text-center">${s.pass_rate}%</td>`;
+                html += `<td class="text-center">${s.excellent_rate}%</td>`;
+            } else {
+                html += '<td class="text-center text-muted">-</td>'.repeat(3);
+            }
+        });
+        html += '</tr>';
+    }
+
+    // 总分行
+    html += '<tr class="table-primary"><td><strong>总分</strong></td>';
+    allData.forEach(d => {
+        if (d.total) {
+            html += `<td class="text-center fw-bold">${d.total.average}</td>`;
+            html += '<td class="text-center">-</td>';
+            html += '<td class="text-center">-</td>';
+        } else {
+            html += '<td class="text-center text-muted">-</td>'.repeat(3);
+        }
+    });
+    html += '</tr>';
+
+    html += '</tbody>';
+    document.getElementById('detailTable').innerHTML = html;
+}
+
+loadExams();
+</script>
+{% endblock %}

@@ -30,3 +30,19 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Claude Code
+.claude/
+
+# MCP
+.playwright-mcp/
+
+# Documents (competition materials)
+源代码/
+0.开发与应用报告/
+advice/
+docs/superpowers/
+
+# Misc docs
+mimo.md
+系统功能.md

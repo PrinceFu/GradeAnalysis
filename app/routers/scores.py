@@ -21,6 +21,7 @@ from app.services.import_service import (
     export_students_template,
     export_scores_template,
     export_exam_results,
+    preview_students_import,
 )
 
 router = APIRouter()
@@ -111,14 +112,26 @@ def list_exam_subjects(exam_id: int, db: Session = Depends(get_db)):
 
 # ---- Excel 导入导出 ----
 
+@router.post("/import/students/preview")
+async def preview_import_students(
+    file: UploadFile = File(...),
+    grade: int = 12,
+    db: Session = Depends(get_db),
+):
+    """预览导入学生结果"""
+    content = await file.read()
+    return preview_students_import(db, content, grade)
+
+
 @router.post("/import/students")
 async def import_students(
     file: UploadFile = File(...),
+    grade: int = 12,
     db: Session = Depends(get_db),
 ):
     """从 Excel 导入学生（仅学生信息）"""
     content = await file.read()
-    result = import_students_from_excel(db, content)
+    result = import_students_from_excel(db, content, grade)
     return result
 
 
@@ -127,6 +140,12 @@ async def import_scores(exam_id: int, file: UploadFile = File(...), db: Session 
     """从 Excel 导入成绩"""
     content = await file.read()
     result = import_scores_from_excel(db, content, exam_id)
+    # 导入新成绩后重置计算状态
+    from app.models.exam import Exam
+    exam = db.get(Exam, exam_id)
+    if exam:
+        exam.is_calculated = False
+        db.commit()
     return result
 
 

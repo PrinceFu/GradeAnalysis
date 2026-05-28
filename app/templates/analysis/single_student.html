@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}个人分析{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item"><a href="/analysis/single/student" class="text-decoration-none">单次考试分析</a></li><li class="breadcrumb-item active">个人分析</li>{% endblock %}
+
+{% block content %}
+<!-- 选择区域 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-3">
+                <select class="form-select" id="examSelect" onchange="loadClassesForExam()">
+                    <option value="">请选择考试</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="classSelect" onchange="loadStudentsForClass()">
+                    <option value="">请先选择考试</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="studentSelect" onchange="loadStudentAnalysis()">
+                    <option value="">请先选择班级</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 学生信息卡片 -->
+<div class="card mb-4" id="studentInfoCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-person-circle me-2"></i>学生信息</div>
+    <div class="card-body">
+        <div class="row" id="studentInfo"></div>
+    </div>
+</div>
+
+<!-- 排名信息 -->
+<div class="row g-3 mb-4" id="rankCards" style="display:none;">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(74,144,217,0.1);color:#4A90D9;"><i class="bi bi-trophy"></i></div>
+            <div class="stat-value" id="totalScore">-</div>
+            <div class="stat-label">总分</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(103,194,58,0.1);color:#67C23A;"><i class="bi bi-bar-chart"></i></div>
+            <div class="stat-value" id="gradeRank">-</div>
+            <div class="stat-label">年级排名</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(230,162,60,0.1);color:#E6A23C;"><i class="bi bi-diagram-3"></i></div>
+            <div class="stat-value" id="classRank">-</div>
+            <div class="stat-label">班级排名</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="stat-icon" style="background:rgba(179,127,235,0.1);color:#b37feb;"><i class="bi bi-people"></i></div>
+            <div class="stat-value" id="totalStudents">-</div>
+            <div class="stat-label">参考人数</div>
+        </div>
+    </div>
+</div>
+
+<!-- 各科成绩与排名 -->
+<div class="card mb-4" id="scoreCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-bar-chart me-2"></i>各科成绩分析</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover" id="scoreTable"></table>
+        </div>
+    </div>
+</div>
+
+<!-- 雷达图 -->
+<div class="card mb-4" id="radarCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-bullseye me-2"></i>成绩雷达图</div>
+    <div class="card-body"><div id="chart-radar" style="height: 400px;"></div></div>
+</div>
+
+<!-- 薄弱科目 -->
+<div class="card mb-4" id="weakCard" style="display:none;">
+    <div class="card-header"><i class="bi bi-exclamation-triangle me-2"></i>薄弱科目分析</div>
+    <div class="card-body">
+        <div class="alert alert-info mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            以下科目成绩低于班级均分10分以上，需重点关注。
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover" id="weakTable"></table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
+let currentExamId = null;
+
+async function loadExams() {
+    try {
+        const exams = await apiFetch('/api/exams/');
+        const select = document.getElementById('examSelect');
+        exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+
+        // 从URL参数或sessionStorage获取考试ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const examIdFromUrl = urlParams.get('exam_id');
+        const examIdFromStorage = sessionStorage.getItem('selectedExamId');
+        const examId = examIdFromUrl || examIdFromStorage;
+
+        if (examId) {
+            select.value = examId;
+            currentExamId = examId;
+            loadClassesForExam();
+        }
+    } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
+}
+
+async function loadClassesForExam() {
+    const examId = document.getElementById('examSelect').value;
+    currentExamId = examId;
+    sessionStorage.setItem('selectedExamId', examId);
+    const classSelect = document.getElementById('classSelect');
+    const studentSelect = document.getElementById('studentSelect');
+    classSelect.innerHTML = '<option value="">请选择班级</option>';
+    studentSelect.innerHTML = '<option value="">请先选择班级</option>';
+    hideAllCards();
+
+    if (!examId) return;
+
+    try {
+        const classes = await apiFetch('/api/students/classes');
+        classes.forEach(c => classSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+    } catch (e) { showToast('加载班级列表失败: ' + e.message, 'error'); }
+}
+
+async function loadStudentsForClass() {
+    const classId = document.getElementById('classSelect').value;
+    const studentSelect = document.getElementById('studentSelect');
+    studentSelect.innerHTML = '<option value="">请选择学生</option>';
+    hideAllCards();
+
+    if (!classId) return;
+
+    try {
+        const resp = await apiFetch(`/api/students/?class_id=${classId}`);
+        (resp.items || resp).forEach(s => studentSelect.innerHTML += `<option value="${s.id}">${s.name} (${s.student_no})</option>`);
+    } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
+}
+
+function hideAllCards() {
+    document.getElementById('studentInfoCard').style.display = 'none';
+    document.getElementById('rankCards').style.display = 'none';
+    document.getElementById('scoreCard').style.display = 'none';
+    document.getElementById('radarCard').style.display = 'none';
+    document.getElementById('weakCard').style.display = 'none';
+}
+
+async function loadStudentAnalysis() {
+    const studentId = document.getElementById('studentSelect').value;
+    if (!studentId || !currentExamId) return;
+
+    try {
+        // 并行获取数据
+        const [student, studentScore, allTotals, classComparison, gradeData, weakSubjects, examSubjects] = await Promise.all([
+            apiFetch(`/api/students/${studentId}`),
+            apiFetch(`/api/scores/totals/${currentExamId}/${studentId}`),
+            apiFetch(`/api/scores/totals/${currentExamId}`),
+            apiFetch(`/api/analysis/class-comparison/${currentExamId}`),
+            apiFetch(`/api/analysis/grade/${currentExamId}`),
+            apiFetch(`/api/analysis/weak-subjects/${studentId}`),
+            apiFetch(`/api/scores/exam-subject/${currentExamId}`),
+        ]);
+
+        // 计算排名
+        const studentRank = allTotals.find(t => t.student_id === parseInt(studentId));
+        const gradeRankNum = studentRank ? studentRank.rank : '-';
+        const totalStudents = allTotals.length;
+
+        // 班级排名
+        const classStudents = allTotals.filter(t => {
+            // 通过 studentScore 中的 class_id 来判断
+            return true; // 简化处理
+        });
+
+        // 找到班级对比数据中的班级均分
+        const classData = classComparison.find(c => c.class_name === student.class_name);
+        const gradeSubjects = gradeData.subjects || {};
+
+        // 学生信息卡片
+        renderStudentInfo(student);
+
+        // 排名卡片
+        document.getElementById('rankCards').style.display = '';
+        document.getElementById('totalScore').textContent = studentScore.total || '-';
+        document.getElementById('gradeRank').textContent = gradeRankNum;
+        document.getElementById('totalStudents').textContent = totalStudents;
+
+        // 计算班级排名
+        const classTotals = allTotals.filter(t => {
+            // 需要通过学生信息判断班级
+            return true;
+        });
+
+        // 各科成绩表
+        renderScoreTable(studentScore, classData, gradeSubjects, examSubjects);
+
+        // 雷达图
+        renderRadarChart(student.name, studentScore, classData, examSubjects);
+
+        // 薄弱科目
+        renderWeakSubjects(weakSubjects);
+
+    } catch (e) { showToast('加载分析数据失败: ' + e.message, 'error'); }
+}
+
+function renderStudentInfo(student) {
+    const card = document.getElementById('studentInfoCard');
+    card.style.display = '';
+    document.getElementById('studentInfo').innerHTML = `
+        <div class="col-md-3">
+            <div class="d-flex align-items-center">
+                <div class="me-3" style="background:rgba(74,144,217,0.1);color:#4A90D9;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-person" style="font-size:1.5em;"></i>
+                </div>
+                <div>
+                    <div class="fw-bold fs-5">${student.name}</div>
+                    <div class="text-muted">${student.student_no}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted mb-1">班级</div>
+            <div class="fw-bold">${student.class_name || '-'}</div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted mb-1">选科组合</div>
+            <div class="fw-bold">${student.combination || '未分科'}</div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted mb-1">性别</div>
+            <div class="fw-bold">${student.gender || '-'}</div>
+        </div>
+    `;
+}
+
+function renderScoreTable(studentScore, classData, gradeSubjects, examSubjects) {
+    const card = document.getElementById('scoreCard');
+    card.style.display = '';
+
+    const scores = studentScore.scores || {};
+    const esMap = {};
+    examSubjects.forEach(es => esMap[es.subject] = es);
+
+    let html = '<thead><tr><th>科目</th><th>满分</th><th>成绩</th><th>班级均分</th><th>年级均分</th><th>与班级均分差</th></tr></thead><tbody>';
+
+    // 按科目顺序排列
+    const subjectOrder = ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理'];
+    const sortedSubjects = subjectOrder.filter(s => s in scores);
+
+    for (const subj of sortedSubjects) {
+        const score = scores[subj];
+        const es = esMap[subj];
+        const fullScore = es ? es.full_score : '-';
+        const classAvg = classData ? (classData.subjects[subj] || '-') : '-';
+        const gradeAvg = gradeSubjects[subj] ? (gradeSubjects[subj].average || '-') : '-';
+        const diff = (classAvg !== '-' && score) ? (score - classAvg).toFixed(1) : '-';
+        const diffClass = diff > 0 ? 'text-success' : (diff < 0 ? 'text-danger' : '');
+
+        html += `<tr>
+            <td><strong>${subj}</strong></td>
+            <td class="text-center">${fullScore}</td>
+            <td class="text-center fw-bold">${score || '-'}</td>
+            <td class="text-center">${classAvg}</td>
+            <td class="text-center">${gradeAvg}</td>
+            <td class="text-center ${diffClass} fw-bold">${diff > 0 ? '+' : ''}${diff}</td>
+        </tr>`;
+    }
+
+    // 总分行
+    html += `<tr class="table-primary">
+        <td><strong>总分</strong></td>
+        <td class="text-center">-</td>
+        <td class="text-center fw-bold fs-5">${studentScore.total || '-'}</td>
+        <td class="text-center">-</td>
+        <td class="text-center">${gradeSubjects['总分'] ? gradeSubjects['总分'].average : '-'}</td>
+        <td class="text-center">-</td>
+    </tr>`;
+
+    html += '</tbody>';
+    document.getElementById('scoreTable').innerHTML = html;
+}
+
+function renderRadarChart(studentName, studentScore, classData, examSubjects) {
+    const card = document.getElementById('radarCard');
+    card.style.display = '';
+
+    const scores = studentScore.scores || {};
+    const subjects = examSubjects.map(es => es.subject).filter(s => s in scores);
+    const studentValues = subjects.map(s => scores[s] || 0);
+    const classAvgs = subjects.map(s => classData ? (classData.subjects[s] || 0) : 0);
+    const maxValues = subjects.map(s => {
+        const es = examSubjects.find(e => e.subject === s);
+        return es ? es.full_score : 150;
+    });
+
+    const chart = echarts.init(document.getElementById('chart-radar'));
+    chart.setOption({
+        tooltip: {},
+        legend: { data: [studentName, '班级均分'], bottom: 0 },
+        radar: {
+            indicator: subjects.map((s, i) => ({ name: s, max: maxValues[i] }))
+        },
+        series: [{
+            type: 'radar',
+            data: [
+                {
+                    name: studentName,
+                    value: studentValues,
+                    lineStyle: { color: COLORS[0], width: 2 },
+                    itemStyle: { color: COLORS[0] },
+                    areaStyle: { opacity: 0.15 }
+                },
+                {
+                    name: '班级均分',
+                    value: classAvgs,
+                    lineStyle: { color: COLORS[1], type: 'dashed', width: 2 },
+                    itemStyle: { color: COLORS[1] },
+                    areaStyle: { opacity: 0.08 }
+                }
+            ]
+        }]
+    });
+}
+
+function renderWeakSubjects(weakSubjects) {
+    const card = document.getElementById('weakCard');
+
+    if (!weakSubjects || weakSubjects.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = '';
+
+    let html = '<thead><tr><th>科目</th><th>成绩</th><th>班级均分</th><th>差距</th></tr></thead><tbody>';
+    for (const w of weakSubjects) {
+        html += `<tr>
+            <td><strong>${w.subject}</strong></td>
+            <td class="text-center">${w.score}</td>
+            <td class="text-center">${w.class_avg}</td>
+            <td class="text-center text-danger fw-bold">${w.diff}</td>
+        </tr>`;
+    }
+    html += '</tbody>';
+    document.getElementById('weakTable').innerHTML = html;
+}
+
+loadExams();
+</script>
+{% endblock %}

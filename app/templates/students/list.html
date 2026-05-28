@@ -20,24 +20,54 @@
 {% block content %}
 <div class="card">
     <div class="card-body">
-        <div class="row mb-3">
+        <!-- 搜索和筛选 -->
+        <div class="row mb-3 g-2">
             <div class="col-md-3">
+                <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="搜索姓名或学号...">
+            </div>
+            <div class="col-md-2">
                 <select id="classFilter" class="form-select form-select-sm">
-                    <option value="">全部班级</option>
+                    <option value="">全部现班级</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <select id="originalClassFilter" class="form-select form-select-sm">
+                    <option value="">全部原班级</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select id="enrollmentYearFilter" class="form-select form-select-sm">
+                    <option value="">全部入学年份</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <select id="comboFilter" class="form-select form-select-sm">
                     <option value="">全部组合</option>
                 </select>
             </div>
         </div>
+
+        <!-- 批量操作工具栏 -->
+        <div id="batchActions" class="alert alert-info py-2 mb-2 d-none">
+            <span>已选择 <strong id="selectedCount">0</strong> 项</span>
+            <button class="btn btn-danger btn-sm ms-2" onclick="batchDelete()">批量删除</button>
+            <button class="btn btn-warning btn-sm ms-1" data-bs-toggle="modal" data-bs-target="#batchClassModal">批量调班</button>
+            <button class="btn btn-info btn-sm ms-1" data-bs-toggle="modal" data-bs-target="#batchComboModal">批量改组合</button>
+            <button class="btn btn-outline-primary btn-sm ms-1" data-bs-toggle="modal" data-bs-target="#batchUpdateStudentsModal">更新学生信息</button>
+            <button class="btn btn-outline-secondary btn-sm ms-1" onclick="clearSelection()">取消选择</button>
+        </div>
+
         <div class="table-responsive">
             <table class="table table-hover table-sm">
                 <thead>
                     <tr>
+                        <th style="width:40px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
                         <th class="sortable" data-sort="student_no">学号 <i class="bi bi-arrow-down-up sort-icon"></i></th>
-                        <th class="sortable" data-sort="class_name">班级 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th>性别</th>
+                        <th>身份证号</th>
+                        <th class="sortable" data-sort="enrollment_year">入学年份 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th class="sortable" data-sort="class_name">现班级 <i class="bi bi-arrow-down-up sort-icon"></i></th>
+                        <th>原班级</th>
                         <th class="sortable" data-sort="name">姓名 <i class="bi bi-arrow-down-up sort-icon"></i></th>
                         <th class="sortable" data-sort="combination">组合 <i class="bi bi-arrow-down-up sort-icon"></i></th>
                         <th>操作</th>
@@ -46,6 +76,21 @@
                 <tbody id="studentTable"></tbody>
             </table>
         </div>
+
+        <!-- 分页 -->
+        <nav id="paginationNav" class="d-flex justify-content-between align-items-center mt-2">
+            <div class="d-flex align-items-center gap-2">
+                <div class="text-muted small" id="pageInfo"></div>
+                <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;">
+                    <option value="50">50条/页</option>
+                    <option value="100">100条/页</option>
+                    <option value="300" selected>300条/页</option>
+                    <option value="1000">1000条/页</option>
+                    <option value="1500">1500条/页</option>
+                </select>
+            </div>
+            <ul class="pagination pagination-sm mb-0" id="paginationList"></ul>
+        </nav>
     </div>
 </div>
 
@@ -55,11 +100,23 @@
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title">添加学生</h5></div>
             <div class="modal-body">
-                <div class="mb-3"><label class="form-label">学号 <span class="text-danger">*</span></label><input type="text" class="form-control" id="addStudentNo" required></div>
+                <div class="mb-3">
+                    <label class="form-label">学号 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="addStudentNo" required>
+                    <div class="form-text text-muted">6-10位数字</div>
+                </div>
                 <div class="mb-3"><label class="form-label">姓名 <span class="text-danger">*</span></label><input type="text" class="form-control" id="addName" required></div>
                 <div class="mb-3">
-                    <label class="form-label">班级 <span class="text-danger">*</span></label>
+                    <label class="form-label">现班级 <span class="text-danger">*</span></label>
                     <select class="form-select" id="addClassId" required></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">性别 <small class="text-muted">（选填）</small></label>
+                    <select class="form-select" id="addGender">
+                        <option value="">（未选择）</option>
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">组合 <small class="text-muted">（选填）</small></label>
@@ -79,6 +136,10 @@
                         <option value="史化生">史化生</option>
                     </select>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">身份证号 <small class="text-muted">（选填）</small></label>
+                    <input type="text" class="form-control" id="addIdCard" maxlength="18">
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -95,11 +156,23 @@
             <div class="modal-header"><h5 class="modal-title">编辑学生</h5></div>
             <div class="modal-body">
                 <input type="hidden" id="editStudentId">
-                <div class="mb-3"><label class="form-label">学号 <span class="text-danger">*</span></label><input type="text" class="form-control" id="editStudentNo" required></div>
+                <div class="mb-3">
+                    <label class="form-label">学号 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="editStudentNo" required>
+                    <div class="form-text text-muted">6-10位数字</div>
+                </div>
                 <div class="mb-3"><label class="form-label">姓名 <span class="text-danger">*</span></label><input type="text" class="form-control" id="editName" required></div>
                 <div class="mb-3">
-                    <label class="form-label">班级 <span class="text-danger">*</span></label>
+                    <label class="form-label">现班级 <span class="text-danger">*</span></label>
                     <select class="form-select" id="editClassId" required></select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">性别 <small class="text-muted">（选填）</small></label>
+                    <select class="form-select" id="editGender">
+                        <option value="">（未选择）</option>
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">组合 <small class="text-muted">（选填）</small></label>
@@ -119,6 +192,10 @@
                         <option value="史化生">史化生</option>
                     </select>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label">身份证号 <small class="text-muted">（选填）</small></label>
+                    <input type="text" class="form-control" id="editIdCard" maxlength="18">
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -128,21 +205,117 @@
     </div>
 </div>
 
-<!-- 导入弹窗 -->
+<!-- 批量调班弹窗 -->
+<div class="modal fade" id="batchClassModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">批量调班</h5></div>
+            <div class="modal-body">
+                <label class="form-label">选择目标现班级</label>
+                <select class="form-select" id="batchClassId"></select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-warning" onclick="batchUpdateClass()">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量改组合弹窗 -->
+<div class="modal fade" id="batchComboModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">批量改组合</h5></div>
+            <div class="modal-body">
+                <label class="form-label">选择组合</label>
+                <select class="form-select" id="batchCombination">
+                    <option value="">（全部科目）</option>
+                    <option value="物化生">物化生</option>
+                    <option value="物化政">物化政</option>
+                    <option value="物化地">物化地</option>
+                    <option value="物生政">物生政</option>
+                    <option value="物生地">物生地</option>
+                    <option value="物政地">物政地</option>
+                    <option value="史政地">史政地</option>
+                    <option value="史化政">史化政</option>
+                    <option value="史化地">史化地</option>
+                    <option value="史生政">史生政</option>
+                    <option value="史生地">史生地</option>
+                    <option value="史化生">史化生</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-info" onclick="batchUpdateCombination()">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量更新学生信息弹窗 -->
+<div class="modal fade" id="batchUpdateStudentsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">更新学生信息</h5></div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">批量更新选中学生的信息。留空的字段将不会被修改。成绩记录保持不变。</p>
+                <div id="batchUpdateSelectedInfo" class="mb-3"></div>
+                <div class="mb-3">
+                    <label class="form-label">现班级 <small class="text-muted">（选填）</small></label>
+                    <select class="form-select" id="batchUpdateClassId">
+                        <option value="">不修改</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">原班级 <small class="text-muted">（选填）</small></label>
+                    <select class="form-select" id="batchUpdateOriginalClassId">
+                        <option value="">不修改</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button class="btn btn-primary" onclick="batchUpdateStudents()">确认更新</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 导入弹窗（多步向导） -->
 <div class="modal fade" id="importModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title">Excel 导入学生</h5></div>
             <div class="modal-body">
-                <p class="text-muted mb-2">请按模板格式准备 Excel 文件。</p>
-                <p class="mb-1"><span class="text-danger">*</span> 必填列：<strong>学号、姓名、班级</strong></p>
-                <p class="mb-1 text-muted">选填列：组合</p>
-                <p class="mb-0 text-muted"><small>仅导入学生信息，成绩请在"成绩录入"页面导入。列名需与模板一致，首尾空格会自动去除。</small></p>
-                <input type="file" class="form-control" id="importFile" accept=".xlsx,.xls">
+                <!-- Step 1: 选文件 -->
+                <div id="importStep1">
+                    <p class="mb-1"><span class="text-danger">*</span> 必填列：<strong>学号、姓名、现班级</strong></p>
+                    <p class="mb-1 text-muted">选填列：原班级、性别、组合、身份证号、入学年份</p>
+                    <p class="mb-3 text-muted"><small>列名需与模板一致，首尾空格会自动去除。</small></p>
+                    <div class="mb-3">
+                        <label class="form-label">选择文件</label>
+                        <input type="file" class="form-control" id="importFile" accept=".xlsx,.xls">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">年级</label>
+                        <select class="form-select" id="importGrade">
+                            <option value="12">高三</option>
+                            <option value="11">高二</option>
+                            <option value="10">高一</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Step 2: 预览 -->
+                <div id="importStep2" class="d-none">
+                    <div id="importPreview"></div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button class="btn btn-primary" onclick="importStudents()">导入</button>
+                <button class="btn btn-primary" id="importNextBtn" onclick="importPreview()">下一步</button>
+                <button class="btn btn-success d-none" id="importConfirmBtn" onclick="importStudents()">确认导入</button>
+                <button class="btn btn-outline-secondary d-none" id="importBackBtn" onclick="importBack()">上一步</button>
             </div>
         </div>
     </div>
@@ -160,13 +333,19 @@
 <script>
 let classes = [];
 let currentSort = { by: 'student_no', order: 'asc' };
+let currentPage = 1;
+let currentPageSize = 300;
+let searchTimer = null;
+let selectedIds = new Set();
+
+// ---- 加载数据 ----
 
 async function loadClasses() {
     try {
         classes = await apiFetch('/api/students/classes');
-        // 添加/编辑弹窗使用全部班级
-        ['addClassId', 'editClassId'].forEach(id => {
+        ['addClassId', 'editClassId', 'batchClassId', 'reassignClassId'].forEach(id => {
             const sel = document.getElementById(id);
+            if (!sel) return;
             sel.innerHTML = '<option value="">请选择班级</option>';
             classes.forEach(c => {
                 sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
@@ -177,13 +356,28 @@ async function loadClasses() {
 
 async function loadClassesWithStudents() {
     try {
-        const classesWithStudents = await apiFetch('/api/students/classes/with-students');
-        const sel = document.getElementById('classFilter');
-        sel.innerHTML = '<option value="">全部班级</option>';
-        classesWithStudents.forEach(c => {
-            sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        const list = await apiFetch('/api/students/classes/with-students');
+        ['classFilter', 'originalClassFilter'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const label = id === 'classFilter' ? '全部现班级' : '全部原班级';
+            sel.innerHTML = `<option value="">${label}</option>`;
+            list.forEach(c => {
+                sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
         });
     } catch (e) { showToast('加载班级筛选失败: ' + e.message, 'error'); }
+}
+
+async function loadAvailableEnrollmentYears() {
+    try {
+        const years = await apiFetch('/api/students/enrollment-years/available');
+        const sel = document.getElementById('enrollmentYearFilter');
+        sel.innerHTML = '<option value="">全部入学年份</option>';
+        years.forEach(y => {
+            sel.innerHTML += `<option value="${y}">${y}</option>`;
+        });
+    } catch (e) { showToast('加载入学年份筛选失败: ' + e.message, 'error'); }
 }
 
 async function loadAvailableCombinations() {
@@ -199,44 +393,223 @@ async function loadAvailableCombinations() {
 
 async function loadStudents() {
     const classId = document.getElementById('classFilter').value;
+    const originalClassId = document.getElementById('originalClassFilter').value;
+    const enrollmentYear = document.getElementById('enrollmentYearFilter').value;
     const combo = document.getElementById('comboFilter').value;
-    let url = '/api/students/?';
-    if (classId) url += `class_id=${classId}&`;
-    if (combo) url += `combination=${combo}&`;
-    url += `sort_by=${currentSort.by}&sort_order=${currentSort.order}`;
+    const search = document.getElementById('searchInput').value.trim();
+    let url = `/api/students/?page=${currentPage}&page_size=${currentPageSize}`;
+    if (classId) url += `&class_id=${classId}`;
+    if (originalClassId) url += `&original_class_id=${originalClassId}`;
+    if (enrollmentYear) url += `&enrollment_year=${enrollmentYear}`;
+    if (combo) url += `&combination=${combo}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    url += `&sort_by=${currentSort.by}&sort_order=${currentSort.order}`;
 
     try {
-        const students = await apiFetch(url);
+        const result = await apiFetch(url);
+        const students = result.items;
         const tbody = document.getElementById('studentTable');
         tbody.innerHTML = students.map(s => {
+            const checked = selectedIds.has(s.id) ? 'checked' : '';
             return `<tr>
+                <td><input type="checkbox" class="student-check" value="${s.id}" ${checked} onchange="onCheckChange()"></td>
                 <td>${s.student_no}</td>
+                <td>${s.gender || '<span class="text-muted">-</span>'}</td>
+                <td>${s.id_card || '<span class="text-muted">-</span>'}</td>
+                <td>${s.enrollment_year || '<span class="text-muted">-</span>'}</td>
                 <td>${s.class_name}</td>
+                <td>${s.original_class_name || '<span class="text-muted">-</span>'}</td>
                 <td>${s.name}</td>
                 <td>${s.combination || '<span class="text-muted">全部</span>'}</td>
-                <td>
-                    <a href="/students/${s.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a>
-                    <button class="btn btn-outline-warning btn-sm" onclick="openEditModal(${s.id})"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i></button>
+                <td class="text-nowrap">
+                    <a href="/students/${s.id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i> 查看</a>
+                    <button class="btn btn-outline-warning btn-sm" onclick="openEditModal(${s.id})"><i class="bi bi-pencil"></i> 编辑</button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="bi bi-trash"></i> 删除</button>
                 </td>
             </tr>`;
         }).join('');
+        renderPagination(result);
     } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
 }
+
+function renderPagination(result) {
+    const { total, page, pages, page_size } = result;
+    const start = (page - 1) * page_size + 1;
+    const end = Math.min(page * page_size, total);
+    document.getElementById('pageInfo').textContent = total > 0 ? `共 ${total} 条，第 ${start}-${end} 条` : '暂无数据';
+
+    const ul = document.getElementById('paginationList');
+    if (pages <= 1) { ul.innerHTML = ''; return; }
+
+    let html = '';
+    html += `<li class="page-item ${page <= 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="goPage(${page - 1}); return false;">上一页</a></li>`;
+    for (let i = 1; i <= pages; i++) {
+        if (pages > 7 && i > 3 && i < pages - 2 && Math.abs(i - page) > 1) {
+            if (i === 4 || i === pages - 3) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            continue;
+        }
+        html += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" onclick="goPage(${i}); return false;">${i}</a></li>`;
+    }
+    html += `<li class="page-item ${page >= pages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="goPage(${page + 1}); return false;">下一页</a></li>`;
+    ul.innerHTML = html;
+}
+
+function goPage(page) {
+    currentPage = page;
+    loadStudents();
+}
+
+// ---- 批量选择 ----
+
+function toggleSelectAll(cb) {
+    document.querySelectorAll('.student-check').forEach(chk => {
+        chk.checked = cb.checked;
+        const id = parseInt(chk.value);
+        if (cb.checked) selectedIds.add(id); else selectedIds.delete(id);
+    });
+    updateBatchUI();
+}
+
+function onCheckChange() {
+    const checkboxes = document.querySelectorAll('.student-check');
+    checkboxes.forEach(chk => {
+        const id = parseInt(chk.value);
+        if (chk.checked) selectedIds.add(id); else selectedIds.delete(id);
+    });
+    document.getElementById('selectAll').checked = checkboxes.length > 0 && [...checkboxes].every(c => c.checked);
+    updateBatchUI();
+}
+
+function clearSelection() {
+    selectedIds.clear();
+    document.querySelectorAll('.student-check').forEach(c => c.checked = false);
+    document.getElementById('selectAll').checked = false;
+    updateBatchUI();
+}
+
+function updateBatchUI() {
+    const count = selectedIds.size;
+    document.getElementById('selectedCount').textContent = count;
+    document.getElementById('batchActions').classList.toggle('d-none', count === 0);
+}
+
+// ---- 批量操作 ----
+
+async function batchDelete() {
+    if (selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    // 查询所有选中学生的成绩总数
+    let totalScores = 0;
+    try {
+        for (const id of ids) {
+            const r = await apiFetch(`/api/students/${id}/score-count`);
+            totalScores += r.score_count;
+        }
+    } catch (e) {}
+    const msg = totalScores > 0
+        ? `确定删除选中的 ${ids.length} 名学生？将一并删除 ${totalScores} 条成绩记录。`
+        : `确定删除选中的 ${ids.length} 名学生？`;
+    if (!await confirmDelete(msg)) return;
+    try {
+        const result = await apiFetch('/api/students/batch-delete', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ student_ids: ids })
+        });
+        showToast(`成功删除 ${result.deleted} 名学生`, 'success');
+        clearSelection();
+        loadStudents();
+        loadClassesWithStudents();
+    } catch (e) { showToast('批量删除失败: ' + e.message, 'error'); }
+}
+
+async function batchUpdateClass() {
+    const classId = document.getElementById('batchClassId').value;
+    if (!classId) { showToast('请选择目标班级', 'warning'); return; }
+    try {
+        const result = await apiFetch('/api/students/batch-update-class', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ student_ids: [...selectedIds], class_id: parseInt(classId) })
+        });
+        bootstrap.Modal.getInstance(document.getElementById('batchClassModal')).hide();
+        showToast(`成功调班 ${result.updated} 名学生`, 'success');
+        clearSelection();
+        loadStudents();
+        loadClassesWithStudents();
+    } catch (e) { showToast('批量调班失败: ' + e.message, 'error'); }
+}
+
+async function batchUpdateCombination() {
+    const combo = document.getElementById('batchCombination').value;
+    try {
+        const result = await apiFetch('/api/students/batch-update-combination', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ student_ids: [...selectedIds], combination: combo })
+        });
+        bootstrap.Modal.getInstance(document.getElementById('batchComboModal')).hide();
+        showToast(`成功修改 ${result.updated} 名学生的组合`, 'success');
+        clearSelection();
+        loadStudents();
+    } catch (e) { showToast('批量修改组合失败: ' + e.message, 'error'); }
+}
+
+// ---- 批量更新学生信息 ----
+
+// 打开批量更新弹窗时更新选中信息和班级选项
+document.getElementById('batchUpdateStudentsModal').addEventListener('show.bs.modal', () => {
+    document.getElementById('batchUpdateSelectedInfo').innerHTML =
+        `<strong>将对 ${selectedIds.size} 名学生更新信息</strong>`;
+    // 加载班级选项
+    ['batchUpdateClassId', 'batchUpdateOriginalClassId'].forEach(id => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = '<option value="">不修改</option>';
+        classes.forEach(c => {
+            sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        });
+    });
+});
+
+async function batchUpdateStudents() {
+    const classId = document.getElementById('batchUpdateClassId').value;
+    const originalClassId = document.getElementById('batchUpdateOriginalClassId').value;
+    if (!classId && !originalClassId) {
+        showToast('请至少选择一个要更新的字段', 'warning');
+        return;
+    }
+    const data = { student_ids: [...selectedIds] };
+    if (classId) data.class_id = parseInt(classId);
+    if (originalClassId) data.original_class_id = parseInt(originalClassId);
+    try {
+        const result = await apiFetch('/api/students/batch-update-students', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        bootstrap.Modal.getInstance(document.getElementById('batchUpdateStudentsModal')).hide();
+        if (result.errors && result.errors.length > 0) {
+            showToast(`更新完成：${result.updated} 成功，${result.errors.length} 失败`, 'warning');
+        } else {
+            showToast(`成功更新 ${result.updated} 名学生信息`, 'success');
+        }
+        clearSelection();
+        loadStudents();
+        loadClassesWithStudents();
+    } catch (e) { showToast('批量更新失败: ' + e.message, 'error'); }
+}
+
+// ---- 学生 CRUD ----
 
 async function addStudent() {
     const student_no = document.getElementById('addStudentNo').value.trim();
     const name = document.getElementById('addName').value.trim();
     const class_id = document.getElementById('addClassId').value;
     if (!student_no || !name || !class_id) {
-        showToast('请填写学号、姓名、班级（必填项）', 'warning');
+        showToast('请填写学号、姓名、现班级（必填项）', 'warning');
         return;
     }
     const data = {
-        student_no,
-        name,
-        class_id: parseInt(class_id),
+        student_no, name, class_id: parseInt(class_id),
+        gender: document.getElementById('addGender').value,
         combination: document.getElementById('addCombination').value,
+        id_card: document.getElementById('addIdCard').value.trim(),
     };
     try {
         await apiFetch('/api/students/', {
@@ -245,6 +618,7 @@ async function addStudent() {
         bootstrap.Modal.getInstance(document.getElementById('addStudentModal')).hide();
         document.getElementById('addStudentNo').value = '';
         document.getElementById('addName').value = '';
+        document.getElementById('addIdCard').value = '';
         showToast('添加学生成功', 'success');
         loadStudents();
         loadClassesWithStudents();
@@ -258,7 +632,9 @@ async function openEditModal(id) {
         document.getElementById('editStudentNo').value = s.student_no;
         document.getElementById('editName').value = s.name;
         document.getElementById('editClassId').value = s.class_id;
+        document.getElementById('editGender').value = s.gender || '';
         document.getElementById('editCombination').value = s.combination;
+        document.getElementById('editIdCard').value = s.id_card || '';
         new bootstrap.Modal(document.getElementById('editStudentModal')).show();
     } catch (e) { showToast('加载学生信息失败: ' + e.message, 'error'); }
 }
@@ -269,14 +645,14 @@ async function updateStudent() {
     const name = document.getElementById('editName').value.trim();
     const class_id = document.getElementById('editClassId').value;
     if (!student_no || !name || !class_id) {
-        showToast('请填写学号、姓名、班级（必填项）', 'warning');
+        showToast('请填写学号、姓名、现班级（必填项）', 'warning');
         return;
     }
     const data = {
-        student_no,
-        name,
-        class_id: parseInt(class_id),
+        student_no, name, class_id: parseInt(class_id),
+        gender: document.getElementById('editGender').value,
         combination: document.getElementById('editCombination').value,
+        id_card: document.getElementById('editIdCard').value.trim(),
     };
     try {
         await apiFetch(`/api/students/${id}`, {
@@ -289,20 +665,77 @@ async function updateStudent() {
 }
 
 async function deleteStudent(id) {
-    if (!confirmDelete('确定删除该学生？')) return;
+    // 查询成绩数量
+    let scoreCount = 0;
+    try {
+        const r = await apiFetch(`/api/students/${id}/score-count`);
+        scoreCount = r.score_count;
+    } catch (e) {}
+    const msg = scoreCount > 0
+        ? `确定删除该学生？该学生有 ${scoreCount} 条成绩记录将一并删除。`
+        : '确定删除该学生？';
+    if (!await confirmDelete(msg)) return;
     try {
         await apiFetch(`/api/students/${id}`, { method: 'DELETE' });
         showToast('删除成功', 'success');
+        selectedIds.delete(id);
         loadStudents();
         loadClassesWithStudents();
     } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
 }
 
+// ---- 导入向导 ----
+
+function importBack() {
+    document.getElementById('importStep1').classList.remove('d-none');
+    document.getElementById('importStep2').classList.add('d-none');
+    document.getElementById('importNextBtn').classList.remove('d-none');
+    document.getElementById('importConfirmBtn').classList.add('d-none');
+    document.getElementById('importBackBtn').classList.add('d-none');
+}
+
+async function importPreview() {
+    const file = document.getElementById('importFile').files[0];
+    if (!file) { showToast('请选择文件', 'warning'); return; }
+    const grade = document.getElementById('importGrade').value;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('grade', grade);
+    try {
+        const result = await apiFetch('/api/scores/import/students/preview', { method: 'POST', body: formData });
+        if (result.error) { showToast('预览失败: ' + result.error, 'error'); return; }
+        // 显示预览
+        let html = `<p>共 ${result.total_rows} 行数据：</p>`;
+        html += `<p class="text-success">新增 ${result.new_students.length} 名学生</p>`;
+        if (result.existing_students.length > 0) {
+            html += `<p class="text-warning">更新 ${result.existing_students.length} 名已有学生</p>`;
+        }
+        if (result.classes_to_create.length > 0) {
+            html += `<p class="text-info">将自动创建班级：${result.classes_to_create.join('、')}</p>`;
+        }
+        if (result.errors.length > 0) {
+            html += `<p class="text-danger">${result.errors.length} 条错误：</p><ul class="text-danger small">`;
+            result.errors.slice(0, 10).forEach(e => { html += `<li>${e}</li>`; });
+            if (result.errors.length > 10) html += `<li>...共 ${result.errors.length} 条</li>`;
+            html += '</ul>';
+        }
+        document.getElementById('importPreview').innerHTML = html;
+        // 切换按钮
+        document.getElementById('importStep1').classList.add('d-none');
+        document.getElementById('importStep2').classList.remove('d-none');
+        document.getElementById('importNextBtn').classList.add('d-none');
+        document.getElementById('importConfirmBtn').classList.remove('d-none');
+        document.getElementById('importBackBtn').classList.remove('d-none');
+    } catch (e) { showToast('预览失败: ' + e.message, 'error'); }
+}
+
 async function importStudents() {
     const file = document.getElementById('importFile').files[0];
     if (!file) { showToast('请选择文件', 'warning'); return; }
+    const grade = document.getElementById('importGrade').value;
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('grade', grade);
     try {
         const result = await apiFetch('/api/scores/import/students', { method: 'POST', body: formData });
         if (result.error) {
@@ -311,17 +744,19 @@ async function importStudents() {
         }
         let msg = `成功导入 ${result.imported} 名学生`;
         if (result.errors && result.errors.length > 0) {
-            msg += `。${result.errors.length} 条数据有误: ${result.errors.slice(0, 3).join('; ')}`;
+            msg += `。${result.errors.length} 条数据有误`;
         }
         showToast(msg, result.imported > 0 ? 'success' : 'warning');
         bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+        importBack();
         loadStudents();
         loadClassesWithStudents();
         loadAvailableCombinations();
     } catch (e) { showToast('导入失败: ' + e.message, 'error'); }
 }
 
-// 排序事件绑定
+// ---- 排序 ----
+
 function bindSortEvents() {
     document.querySelectorAll('.sortable').forEach(th => {
         th.addEventListener('click', () => {
@@ -334,16 +769,40 @@ function bindSortEvents() {
             }
             document.querySelectorAll('.sortable').forEach(t => t.classList.remove('asc', 'desc'));
             th.classList.add(currentSort.order);
+            currentPage = 1;
             loadStudents();
         });
     });
 }
 
-// 筛选
-document.getElementById('classFilter').addEventListener('change', loadStudents);
-document.getElementById('comboFilter').addEventListener('change', loadStudents);
+// ---- 搜索防抖 ----
+
+document.getElementById('searchInput').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        currentPage = 1;
+        loadStudents();
+    }, 300);
+});
+
+// ---- 筛选 ----
+
+document.getElementById('classFilter').addEventListener('change', () => { currentPage = 1; loadStudents(); });
+document.getElementById('originalClassFilter').addEventListener('change', () => { currentPage = 1; loadStudents(); });
+document.getElementById('enrollmentYearFilter').addEventListener('change', () => { currentPage = 1; loadStudents(); });
+document.getElementById('comboFilter').addEventListener('change', () => { currentPage = 1; loadStudents(); });
+
+// ---- 分页大小 ----
+
+document.getElementById('pageSizeSelect').addEventListener('change', (e) => {
+    currentPageSize = parseInt(e.target.value);
+    currentPage = 1;
+    loadStudents();
+});
+
+// ---- 初始化 ----
 
 bindSortEvents();
-Promise.all([loadClasses(), loadClassesWithStudents(), loadAvailableCombinations()]).then(() => loadStudents());
+Promise.all([loadClasses(), loadClassesWithStudents(), loadAvailableCombinations(), loadAvailableEnrollmentYears()]).then(() => loadStudents());
 </script>
 {% endblock %}

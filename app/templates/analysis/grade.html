@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}年级分析{% endblock %}
-{% block breadcrumb %}<li class="breadcrumb-item active">年级分析</li>{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item"><a href="/analysis/single/grade" class="text-decoration-none">单次考试分析</a></li><li class="breadcrumb-item active">年级分析</li>{% endblock %}
 
 {% block content %}
+<!-- 考试选择 -->
 <div class="card mb-4">
     <div class="card-body">
         <div class="row align-items-center">
@@ -15,9 +16,40 @@
     </div>
 </div>
 
-<div class="row g-3 mb-4" id="overview-cards"></div>
+<!-- 导航栏 -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded" id="analysis-nav" style="display:none;">
+    <div class="container-fluid">
+        <span class="navbar-brand fw-bold"><i class="bi bi-list-ul me-2"></i>快速导航</span>
+        <div class="navbar-nav">
+            <a class="nav-link" href="#section-combination">组合总览</a>
+            <a class="nav-link" href="#section-charts">均分及格率</a>
+            <a class="nav-link" href="#section-quality">质量分析</a>
+            <a class="nav-link" href="#section-segments">分段统计</a>
+            <a class="nav-link" href="#section-rank">排名分布</a>
+            <a class="nav-link" href="#section-shape">分布形态</a>
+            <a class="nav-link" href="#section-critical">临界生</a>
+        </div>
+    </div>
+</nav>
 
-<div class="row g-3 mb-4">
+<!-- 1. 各组合数据总览 -->
+<div class="card mb-4" id="section-combination" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-grid-3x3-gap me-2"></i>各组合数据总览</span>
+        <button class="btn btn-sm btn-outline-success" onclick="exportCombinationExcel()"><i class="bi bi-download me-1"></i>导出Excel</button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" id="combinationTable">
+                <thead id="combinationHead"></thead>
+                <tbody id="combinationBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 2. 各科均分对比 & 及格率/优秀率 -->
+<div class="row g-3 mb-4" id="section-charts" style="display:none;">
     <div class="col-md-6">
         <div class="card">
             <div class="card-header"><i class="bi bi-bar-chart me-2"></i>各科均分对比</div>
@@ -32,15 +64,129 @@
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header"><i class="bi bi-table me-2"></i>各科详细统计</div>
+<!-- 3. 考试质量分析表 -->
+<div class="card mb-4" id="section-quality" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clipboard-data me-2"></i>考试质量分析表</span>
+        <button class="btn btn-sm btn-outline-success" onclick="exportQualityExcel()"><i class="bi bi-download me-1"></i>导出Excel</button>
+    </div>
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table table-sm table-hover">
+            <table class="table table-sm table-bordered table-hover" id="qualityTable"></table>
+        </div>
+    </div>
+</div>
+
+<!-- 4. 成绩分段统计 -->
+<div class="card mb-4" id="section-segments" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bar-chart-steps me-2"></i>成绩分段统计</span>
+        <button class="btn btn-sm btn-outline-success" onclick="exportQualityExcel()"><i class="bi bi-download me-1"></i>导出Excel</button>
+    </div>
+    <div class="card-body" id="segmentBody"></div>
+</div>
+
+<!-- 5. 排名分布 -->
+<div class="card mb-4" id="section-rank" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-sort-numeric-down me-2"></i>排名分布</span>
+        <div>
+            <div class="input-group input-group-sm me-2" style="width: 250px; display: inline-flex;">
+                <span class="input-group-text">前</span>
+                <input type="number" class="form-control" id="topN" value="30" min="1" max="200">
+                <span class="input-group-text">名 / 后</span>
+                <input type="number" class="form-control" id="bottomN" value="30" min="1" max="200">
+                <span class="input-group-text">名</span>
+                <button class="btn btn-primary" onclick="loadRankDistribution()">查询</button>
+            </div>
+            <button class="btn btn-sm btn-outline-success" onclick="exportRankExcel()"><i class="bi bi-download me-1"></i>导出Excel</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6 class="text-center mb-3">前<span id="topNLabel">30</span>名分布</h6>
+                <div id="chart-rank-top" style="height: 300px;"></div>
+            </div>
+            <div class="col-md-6">
+                <h6 class="text-center mb-3">后<span id="bottomNLabel">30</span>名分布</h6>
+                <div id="chart-rank-bottom" style="height: 300px;"></div>
+            </div>
+        </div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-bordered table-hover" id="rankTable">
                 <thead>
-                    <tr><th>科目</th><th>满分</th><th>参考人数</th><th>均分</th><th>最高</th><th>最低</th><th>及格率</th><th>优秀率</th></tr>
+                    <tr>
+                        <th>班级</th>
+                        <th>前<span class="top-n">30</span>名人数</th>
+                        <th>后<span class="bottom-n">30</span>名人数</th>
+                    </tr>
                 </thead>
-                <tbody id="subjectTable"></tbody>
+                <tbody id="rankBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 6. 分数分布形态 -->
+<div class="card mb-4" id="section-shape" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up me-2"></i>分数分布形态分析</span>
+        <div class="d-flex align-items-center gap-2">
+            <select class="form-select form-select-sm" id="shapeClassSelect" style="width:auto;" onchange="renderShapeCharts()">
+                <option value="">年级整体</option>
+            </select>
+            <button class="btn btn-sm btn-outline-success" onclick="exportShapeExcel()"><i class="bi bi-download me-1"></i>导出Excel</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-info" id="shapeSummary"></div>
+            </div>
+        </div>
+        <div id="shapeChartsContainer"></div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-bordered table-hover" id="shapeTable">
+                <thead>
+                    <tr>
+                        <th>科目</th><th>满分</th><th>参考人数</th>
+                        <th>平均分</th><th>标准差</th><th>偏度</th>
+                        <th>峰度</th><th>分布形态</th><th>说明</th>
+                    </tr>
+                </thead>
+                <tbody id="shapeBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 7. 临界生统计 -->
+<div class="card mb-4" id="section-critical" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-exclamation-triangle me-2"></i>临界生统计</span>
+        <button class="btn btn-sm btn-outline-success" onclick="exportCriticalExcel()"><i class="bi bi-download me-1"></i>导出Excel</button>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-secondary mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>临界生定义：</strong>分数在及格线附近（及格线-10分到及格线+10分）的学生。语数英及格线为90分，其他科目及格线为60分。
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover" id="criticalTable">
+                <thead>
+                    <tr>
+                        <th>科目</th>
+                        <th>满分</th>
+                        <th>及格线</th>
+                        <th>临界区间</th>
+                        <th>临界生人数</th>
+                        <th>临界生占比</th>
+                        <th>及格线以下</th>
+                        <th>及格线以上</th>
+                    </tr>
+                </thead>
+                <tbody id="criticalBody"></tbody>
             </table>
         </div>
     </div>
@@ -51,101 +197,660 @@
 <script>
 const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
 
+let currentExamId = null;
+
 async function loadExams() {
     try {
         const exams = await apiFetch('/api/exams/');
         const select = document.getElementById('examSelect');
         exams.forEach(e => select.innerHTML += `<option value="${e.id}">${e.name}</option>`);
+
+        // 从URL参数或sessionStorage获取考试ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const examIdFromUrl = urlParams.get('exam_id');
+        const examIdFromStorage = sessionStorage.getItem('selectedExamId');
+        const examId = examIdFromUrl || examIdFromStorage;
+
+        if (examId) {
+            select.value = examId;
+            currentExamId = examId;
+            loadGradeAnalysis();
+        }
     } catch (e) { showToast('加载考试列表失败: ' + e.message, 'error'); }
 }
 
 async function loadGradeAnalysis() {
-    const examId = document.getElementById('examSelect').value;
+    const examId = document.getElementById('examSelect').value || currentExamId;
     if (!examId) return;
+    currentExamId = examId;
+    sessionStorage.setItem('selectedExamId', examId);
+
+    // 显示导航
+    document.getElementById('analysis-nav').style.display = '';
 
     try {
-        const overview = await apiFetch(`/api/analysis/grade/${examId}`);
+        // 加载基础数据
+        const overview = await apiFetch(`/api/analysis/grade/${examId}?t=${Date.now()}`);
 
-        // 总览卡片
-        const cardsDiv = document.getElementById('overview-cards');
-        if (overview.total && overview.total.count > 0) {
-            const t = overview.total;
-            cardsDiv.innerHTML = `
-                <div class="col-md-3">
-                    <div class="card stat-card">
-                        <div class="stat-icon" style="background:rgba(74,144,217,0.1);color:#4A90D9;"><i class="bi bi-people"></i></div>
-                        <div class="stat-value">${t.count}</div>
-                        <div class="stat-label">参考人数</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card stat-card">
-                        <div class="stat-icon" style="background:rgba(103,194,58,0.1);color:#67C23A;"><i class="bi bi-graph-up"></i></div>
-                        <div class="stat-value">${t.average}</div>
-                        <div class="stat-label">总分均分</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card stat-card">
-                        <div class="stat-icon" style="background:rgba(230,162,60,0.1);color:#E6A23C;"><i class="bi bi-award"></i></div>
-                        <div class="stat-value">${t.max}</div>
-                        <div class="stat-label">最高总分</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card stat-card">
-                        <div class="stat-icon" style="background:rgba(245,108,108,0.1);color:#F56C6C;"><i class="bi bi-arrow-down"></i></div>
-                        <div class="stat-value">${t.min}</div>
-                        <div class="stat-label">最低总分</div>
-                    </div>
-                </div>
-            `;
-        }
+        // 1. 各组合数据总览
+        renderCombinationTable(overview);
 
-        const subjects = Object.values(overview.subjects || {});
+        // 2. 图表
+        renderCharts(overview);
 
-        // 统计表
-        document.getElementById('subjectTable').innerHTML = subjects.map(s => `
-            <tr>
-                <td>${s.subject}</td><td>${s.full_score}</td><td>${s.count}</td>
-                <td>${s.average}</td><td>${s.max}</td><td>${s.min}</td>
-                <td>${s.pass_rate}%</td><td>${s.excellent_rate}%</td>
-            </tr>
-        `).join('');
+        // 3. 考试质量分析表
+        try {
+            const quality = await apiFetch(`/api/analysis/quality-analysis/${examId}?t=${Date.now()}`);
+            renderQualityTable(quality);
+        } catch (e) { console.error('加载质量分析失败:', e); }
 
-        // 均分对比图
-        if (subjects.length > 0) {
-            const avgChart = echarts.init(document.getElementById('chart-avg'));
-            avgChart.setOption({
-                tooltip: { trigger: 'axis' },
-                grid: { left: 50, right: 20, top: 20, bottom: 40 },
-                xAxis: { type: 'category', data: subjects.map(s => s.subject) },
-                yAxis: { type: 'value', name: '均分' },
-                series: [{
-                    type: 'bar', data: subjects.map((s, i) => ({
-                        value: s.average,
-                        itemStyle: { color: COLORS[i % COLORS.length] }
-                    })),
-                    label: { show: true, position: 'top', formatter: '{c}' }
-                }]
-            });
+        // 4. 成绩分段统计
+        try {
+            const segments = await apiFetch(`/api/analysis/score-segments/${examId}?t=${Date.now()}`);
+            renderSegmentTable(segments);
+        } catch (e) { console.error('加载分段统计失败:', e); }
 
-            // 率对比图
-            const rateChart = echarts.init(document.getElementById('chart-rates'));
-            rateChart.setOption({
-                tooltip: { trigger: 'axis' },
-                legend: { data: ['及格率', '优秀率'], bottom: 0 },
-                grid: { left: 50, right: 20, top: 20, bottom: 50 },
-                xAxis: { type: 'category', data: subjects.map(s => s.subject) },
-                yAxis: { type: 'value', name: '%', max: 100 },
-                series: [
-                    { name: '及格率', type: 'bar', data: subjects.map(s => s.pass_rate), itemStyle: { color: COLORS[1] } },
-                    { name: '优秀率', type: 'bar', data: subjects.map(s => s.excellent_rate), itemStyle: { color: COLORS[2] } }
-                ]
-            });
-        }
+        // 5. 排名分布
+        await loadRankDistribution();
+
+        // 6. 分数分布形态
+        try {
+            const shape = await apiFetch(`/api/analysis/score-shape/${examId}?t=${Date.now()}`);
+            renderShapeAnalysis(shape);
+        } catch (e) { console.error('加载分布形态失败:', e); }
+
+        // 7. 临界生统计
+        try {
+            const critical = await apiFetch(`/api/analysis/critical-students/${examId}?t=${Date.now()}`);
+            renderCriticalStudents(critical);
+        } catch (e) { console.error('加载临界生统计失败:', e); }
+
     } catch (e) { showToast('加载分析数据失败: ' + e.message, 'error'); }
 }
+
+// 1. 组合总览
+function renderCombinationTable(overview) {
+    const card = document.getElementById('section-combination');
+    const 班级数据 = overview['班级数据'] || {};
+    const classKeys = Object.keys(班级数据);
+    const hasConv = overview['有赋分'];
+    const gradeSummary = overview['年级汇总'] || {};
+    if (classKeys.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    // 表头
+    let headHtml = '<tr><th>班级</th><th>考试人数</th><th>原始分总平均分</th><th>原始分最高分</th><th>原始分最低分</th><th>原始分中位数</th>';
+    if (hasConv) headHtml += '<th>赋分总平均分</th><th>赋分最高分</th><th>赋分最低分</th><th>赋分中位数</th>';
+    headHtml += '</tr>';
+    document.getElementById('combinationHead').innerHTML = headHtml;
+
+    // 表体
+    let bodyHtml = '';
+    for (const cls of classKeys) {
+        const c = 班级数据[cls];
+        bodyHtml += `<tr><td><strong>${cls}</strong></td><td>${c['考试人数']}</td><td>${c['原始分总平均分']}</td><td>${c['原始分最高分']}</td><td>${c['原始分最低分']}</td><td>${c['原始分中位数']}</td>`;
+        if (hasConv) bodyHtml += `<td>${c['赋分总平均分'] !== undefined ? c['赋分总平均分'] : '-'}</td><td>${c['赋分最高分'] !== undefined ? c['赋分最高分'] : '-'}</td><td>${c['赋分最低分'] !== undefined ? c['赋分最低分'] : '-'}</td><td>${c['赋分中位数'] !== undefined ? c['赋分中位数'] : '-'}</td>`;
+        bodyHtml += '</tr>';
+    }
+
+    // 年级汇总行
+    if (gradeSummary && gradeSummary['考试人数']) {
+        bodyHtml += `<tr class="table-warning fw-bold"><td>年级</td><td>${gradeSummary['考试人数']}</td><td>${gradeSummary['原始分总平均分']}</td><td>${gradeSummary['原始分最高分']}</td><td>${gradeSummary['原始分最低分']}</td><td>${gradeSummary['原始分中位数']}</td>`;
+        if (hasConv) bodyHtml += `<td>${gradeSummary['赋分总平均分'] !== undefined ? gradeSummary['赋分总平均分'] : '-'}</td><td>${gradeSummary['赋分最高分'] !== undefined ? gradeSummary['赋分最高分'] : '-'}</td><td>${gradeSummary['赋分最低分'] !== undefined ? gradeSummary['赋分最低分'] : '-'}</td><td>${gradeSummary['赋分中位数'] !== undefined ? gradeSummary['赋分中位数'] : '-'}</td>`;
+        bodyHtml += '</tr>';
+    }
+
+    document.getElementById('combinationBody').innerHTML = bodyHtml;
+}
+
+// 2. 图表
+function renderCharts(overview) {
+    const card = document.getElementById('section-charts');
+    const subjects = Object.values(overview.subjects || {});
+    if (subjects.length === 0) { card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    // 均分对比图
+    const avgChart = echarts.init(document.getElementById('chart-avg'));
+    avgChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 50, right: 20, top: 20, bottom: 40 },
+        xAxis: { type: 'category', data: subjects.map(s => s.subject) },
+        yAxis: { type: 'value', name: '均分' },
+        series: [{
+            type: 'bar', data: subjects.map((s, i) => ({
+                value: s.average,
+                itemStyle: { color: COLORS[i % COLORS.length] }
+            })),
+            label: { show: true, position: 'top', formatter: '{c}' }
+        }]
+    });
+
+    // 率对比图
+    const rateChart = echarts.init(document.getElementById('chart-rates'));
+    rateChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['及格率', '优秀率'], bottom: 0 },
+        grid: { left: 50, right: 20, top: 20, bottom: 50 },
+        xAxis: { type: 'category', data: subjects.map(s => s.subject) },
+        yAxis: { type: 'value', name: '%', max: 100 },
+        series: [
+            { name: '及格率', type: 'bar', data: subjects.map(s => s.pass_rate), itemStyle: { color: COLORS[1] } },
+            { name: '优秀率', type: 'bar', data: subjects.map(s => s.excellent_rate), itemStyle: { color: COLORS[2] } }
+        ]
+    });
+}
+
+// 3. 质量分析表
+function renderQualityTable(data) {
+    const card = document.getElementById('section-quality');
+    const classes = data.classes || [];
+    const subjects = data.data || data.subjects || {};
+    if (!classes.length || !Object.keys(subjects).length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    function dataKey(clsName, combo) {
+        return combo ? `${clsName}_${combo}` : clsName;
+    }
+
+    const nCols = classes.length + 2;
+    let html = '<thead>';
+
+    // 表头行1：科目 | 班级 | 班级名（跨组合合并）| ...
+    html += '<tr><th rowspan="3" class="align-middle text-center">科目</th>';
+    html += '<th rowspan="3" class="align-middle text-center">班级</th>';
+    let ci = 0;
+    while (ci < classes.length) {
+        const cls = classes[ci];
+        let span = 1;
+        while (ci + span < classes.length && classes[ci + span].class_name === cls.class_name) {
+            span++;
+        }
+        html += `<th class="text-center"${span > 1 ? ` colspan="${span}"` : ''}>${cls.class_name}</th>`;
+        ci += span;
+    }
+    html += '</tr>';
+
+    // 表头行2：组合
+    html += '<tr>';
+    for (const cls of classes) {
+        html += `<th class="text-center">${cls.combination || '未分组'}</th>`;
+    }
+    html += '</tr>';
+
+    // 表头行3：班级人数
+    html += '<tr>';
+    for (const cls of classes) {
+        html += `<th class="text-center">${cls.student_count}</th>`;
+    }
+    html += '</tr></thead>';
+
+    // 表体
+    html += '<tbody>';
+    const statRows = [
+        { label: '任课教师', key: '_teacher' },
+        { label: '最高分', key: '最高分' },
+        { label: '最低分', key: '最低分' },
+        { label: '班级前10名平均分', key: '班级前10名平均分' },
+        { label: '班级后10名平均分', key: '班级后10名平均分' },
+        { label: '班级均分', key: '班级均分' },
+        { label: '中位数', key: '中位数' },
+    ];
+
+    for (const [subj, subjData] of Object.entries(subjects)) {
+        html += `<tr class="table-light"><td colspan="${nCols}" class="text-center fw-bold text-primary" style="background:#f0f5ff">${subj}（满分${subjData.full_score}）</td></tr>`;
+
+        for (const stat of statRows) {
+            html += '<tr>';
+            html += `<td class="text-muted" style="font-size:0.85em">${stat.label}</td>`;
+            html += '<td></td>';
+            for (const cls of classes) {
+                const dk = dataKey(cls.class_name, cls.combination || '');
+                const clsData = subjData.classes ? subjData.classes[dk] : undefined;
+                if (clsData === null || clsData === undefined) {
+                    html += '<td class="text-center text-muted">/</td>';
+                } else if (stat.key === '_teacher') {
+                    html += '<td class="text-center"></td>';
+                } else {
+                    const val = clsData[stat.key];
+                    html += `<td class="text-center">${val !== null && val !== undefined ? val : '-'}</td>`;
+                }
+            }
+            html += '</tr>';
+        }
+    }
+
+    html += `<tr class="table-light"><td colspan="${nCols}" class="text-center fw-bold">班主任</td></tr>`;
+    html += '<tr><td colspan="2" class="text-muted">班主任</td>';
+    for (let i = 0; i < classes.length; i++) {
+        html += '<td class="text-center"></td>';
+    }
+    html += '</tr></tbody>';
+
+    document.getElementById('qualityTable').innerHTML = html;
+}
+
+// 4. 分段统计
+function renderSegmentTable(data) {
+    const card = document.getElementById('section-segments');
+    const total = data.total || {};
+    const subjects = data.subjects || {};
+    const hasTotal = total.classes && Object.keys(total.classes).length > 0;
+    const hasSubjects = subjects && Object.keys(subjects).length > 0;
+    if (!hasTotal && !hasSubjects) { card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    let clsNames = [];
+    if (hasTotal) clsNames = Object.keys(total.classes);
+    else if (hasSubjects) {
+        const firstSubj = Object.values(subjects)[0];
+        if (firstSubj) clsNames = Object.keys(firstSubj.classes).filter(k => firstSubj.classes[k] !== null);
+    }
+
+    let html = '';
+    html += '<div class="table-responsive"><table class="table table-sm table-bordered table-hover">';
+
+    if (hasTotal) {
+        html += `<tr class="table-secondary"><td colspan="${clsNames.length + 1}" class="text-center fw-bold text-primary">总分（50分一段）</td></tr>`;
+        html += '<tr class="table-dark"><th class="text-center">分数段</th>';
+        for (const cn of clsNames) {
+            html += `<th class="text-center">${cn}</th>`;
+        }
+        html += '</tr>';
+        for (let li = 0; li < total.labels.length; li++) {
+            html += `<tr><td class="text-center fw-bold">${total.labels[li]}</td>`;
+            for (const cn of clsNames) {
+                const clsData = total.classes[cn];
+                if (clsData) {
+                    html += `<td class="text-center"><div>${clsData.counts[li]}</div><small class="text-muted">${clsData.pcts[li]}%</small></td>`;
+                } else {
+                    html += '<td class="text-center">0<br><small class="text-muted">0%</small></td>';
+                }
+            }
+            html += '</tr>';
+        }
+    }
+
+    const subjectOrder = ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理'];
+    for (const subj of subjectOrder) {
+        const subjData = subjects[subj];
+        if (!subjData) continue;
+
+        html += `<tr class="table-secondary"><td colspan="${clsNames.length + 1}" class="text-center fw-bold text-primary">${subj}（${subjData.full_score}分满分，${subjData.pass_threshold}分及格）</td></tr>`;
+        html += '<tr class="table-dark"><th class="text-center">分数段</th>';
+        for (const cn of clsNames) {
+            html += `<th class="text-center">${cn}</th>`;
+        }
+        html += '</tr>';
+        for (let li = 0; li < subjData.labels.length; li++) {
+            html += `<tr><td class="text-center fw-bold">${subjData.labels[li]}</td>`;
+            for (const cn of clsNames) {
+                const clsData = subjData.classes[cn];
+                if (clsData === null || clsData === undefined) {
+                    html += '<td class="text-center text-muted">/</td>';
+                } else {
+                    html += `<td class="text-center"><div>${clsData.counts[li]}</div><small class="text-muted">${clsData.pcts[li]}%</small></td>`;
+                }
+            }
+            html += '</tr>';
+        }
+        html += '<tr class="table-success"><td class="text-center fw-bold">合格率</td>';
+        for (const cn of clsNames) {
+            const clsData = subjData.classes[cn];
+            if (clsData === null || clsData === undefined) {
+                html += '<td class="text-center text-muted">/</td>';
+            } else {
+                html += `<td class="text-center fw-bold">${clsData.pass_rate}%</td>`;
+            }
+        }
+        html += '</tr>';
+    }
+
+    html += '</table></div>';
+    document.getElementById('segmentBody').innerHTML = html;
+}
+
+// 5. 排名分布
+async function loadRankDistribution() {
+    if (!currentExamId) return;
+
+    const topN = parseInt(document.getElementById('topN').value) || 30;
+    const bottomN = parseInt(document.getElementById('bottomN').value) || 30;
+
+    document.getElementById('topNLabel').textContent = topN;
+    document.getElementById('bottomNLabel').textContent = bottomN;
+    document.querySelectorAll('.top-n').forEach(el => el.textContent = topN);
+    document.querySelectorAll('.bottom-n').forEach(el => el.textContent = bottomN);
+
+    try {
+        const data = await apiFetch(`/api/analysis/rank-distribution/${currentExamId}?top_n=${topN}&bottom_n=${bottomN}&t=${Date.now()}`);
+        renderRankDistribution(data, topN, bottomN);
+    } catch (e) {
+        console.error('加载排名分布失败:', e);
+        document.getElementById('section-rank').style.display = 'none';
+    }
+}
+
+function renderRankDistribution(data, topN, bottomN) {
+    const card = document.getElementById('section-rank');
+    const topInfo = data.top || {};
+    const bottomInfo = data.bottom || {};
+    const topDist = topInfo.distribution || {};
+    const bottomDist = bottomInfo.distribution || {};
+
+    if (Object.keys(topDist).length === 0 && Object.keys(bottomDist).length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = '';
+
+    // 合并所有班级
+    const allClasses = [...new Set([...Object.keys(topDist), ...Object.keys(bottomDist)])].sort();
+
+    // 表格
+    let bodyHtml = '';
+    for (const cls of allClasses) {
+        bodyHtml += `<tr><td>${cls}</td><td class="text-center">${topDist[cls] || 0}</td><td class="text-center">${bottomDist[cls] || 0}</td></tr>`;
+    }
+    document.getElementById('rankBody').innerHTML = bodyHtml;
+
+    // 图表
+    const topChart = echarts.init(document.getElementById('chart-rank-top'));
+    topChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' },
+        legend: { orient: 'vertical', left: 'left', top: 'middle' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            center: ['60%', '50%'],
+            data: allClasses.map((cls, i) => ({
+                name: cls,
+                value: topDist[cls] || 0,
+                itemStyle: { color: COLORS[i % COLORS.length] }
+            })),
+            label: { show: true, formatter: '{b}: {c}人' }
+        }]
+    });
+
+    const bottomChart = echarts.init(document.getElementById('chart-rank-bottom'));
+    bottomChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' },
+        legend: { orient: 'vertical', left: 'left', top: 'middle' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            center: ['60%', '50%'],
+            data: allClasses.map((cls, i) => ({
+                name: cls,
+                value: bottomDist[cls] || 0,
+                itemStyle: { color: COLORS[i % COLORS.length] }
+            })),
+            label: { show: true, formatter: '{b}: {c}人' }
+        }]
+    });
+}
+
+// 6. 分布形态
+// 全局存储分布形态数据
+let shapeData = null;
+
+function renderShapeAnalysis(data) {
+    const card = document.getElementById('section-shape');
+    shapeData = data;
+    const subjects = data.subjects || {};
+    const total = data.total || {};
+
+    if (Object.keys(subjects).length === 0 && Object.keys(total).length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = '';
+
+    // 填充班级选择器
+    const select = document.getElementById('shapeClassSelect');
+    select.innerHTML = '<option value="">年级整体</option>';
+    for (const cls of (data.classes || [])) {
+        select.innerHTML += `<option value="${cls.id}">${cls.name}</option>`;
+    }
+
+    // 渲染图表和表格
+    renderShapeCharts();
+}
+
+function renderShapeCharts() {
+    if (!shapeData) return;
+    const classId = document.getElementById('shapeClassSelect').value;
+    const subjects = shapeData.subjects || {};
+    const total = shapeData.total || {};
+    const container = document.getElementById('shapeChartsContainer');
+
+    // 摘要
+    let totalInfo = null;
+    if (total.shape) {
+        totalInfo = classId ? (total.per_class || {})[classId] : total;
+    }
+    let summaryHtml = '<strong>分布形态分析摘要：</strong><br>';
+    if (totalInfo && totalInfo.shape) {
+        summaryHtml += `总分呈现<strong>${totalInfo.shape}</strong>，${totalInfo.description} ${totalInfo.peak_description}`;
+    } else if (total.shape) {
+        summaryHtml += `总分呈现<strong>${total.shape}</strong>，${total.description} ${total.peak_description}`;
+    }
+    document.getElementById('shapeSummary').innerHTML = summaryHtml;
+
+    // 渲染图表
+    let chartsHtml = '<div class="row g-3">';
+    const subjectNames = Object.keys(subjects);
+    for (const subj of subjectNames) {
+        chartsHtml += `<div class="col-md-6"><div id="shape-chart-${subj}" style="height:320px;"></div></div>`;
+    }
+    // 总分图
+    if (totalInfo && totalInfo.histogram) {
+        chartsHtml += '<div class="col-md-6"><div id="shape-chart-total" style="height:320px;"></div></div>';
+    }
+    chartsHtml += '</div>';
+    container.innerHTML = chartsHtml;
+
+    // 初始化 ECharts
+    for (const subj of subjectNames) {
+        const info = classId ? (subjects[subj].per_class || {})[classId] : subjects[subj];
+        if (!info || !info.histogram) continue;
+        const chartDom = document.getElementById(`shape-chart-${subj}`);
+        if (!chartDom) continue;
+        const chart = echarts.init(chartDom);
+        const hist = info.histogram;
+        chart.setOption({
+            title: {
+                text: `${subj}（满分${subjects[subj].full_score}）`,
+                subtext: `${info.shape} | 均分${info.mean} | 标准差${info.std}`,
+                left: 'center', top: 5,
+                textStyle: { fontSize: 14 },
+                subtextStyle: { fontSize: 11 }
+            },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            grid: { left: 50, right: 20, top: 65, bottom: 40 },
+            xAxis: {
+                type: 'category', data: hist.labels,
+                axisLabel: { rotate: 45, fontSize: 10 },
+                name: '分数段'
+            },
+            yAxis: { type: 'value', name: '人数' },
+            series: [{
+                type: 'bar', data: hist.counts,
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: '#5470c6' },
+                        { offset: 1, color: '#91cc75' }
+                    ])
+                },
+                label: { show: true, position: 'top', fontSize: 10, formatter: '{c}' }
+            }]
+        });
+    }
+
+    // 总分图
+    if (totalInfo && totalInfo.histogram) {
+        const chartDom = document.getElementById('shape-chart-total');
+        if (chartDom) {
+            const chart = echarts.init(chartDom);
+            const hist = totalInfo.histogram;
+            chart.setOption({
+                title: {
+                    text: '总分分布',
+                    subtext: `${totalInfo.shape} | 均分${totalInfo.mean} | 标准差${totalInfo.std}`,
+                    left: 'center', top: 5,
+                    textStyle: { fontSize: 14 },
+                    subtextStyle: { fontSize: 11 }
+                },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: 55, right: 20, top: 65, bottom: 40 },
+                xAxis: {
+                    type: 'category', data: hist.labels,
+                    axisLabel: { rotate: 45, fontSize: 10 },
+                    name: '分数段'
+                },
+                yAxis: { type: 'value', name: '人数' },
+                series: [{
+                    type: 'bar', data: hist.counts,
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#ee6666' },
+                            { offset: 1, color: '#fac858' }
+                        ])
+                    },
+                    label: { show: true, position: 'top', fontSize: 10, formatter: '{c}' }
+                }]
+            });
+        }
+    }
+
+    // 统计表格
+    let bodyHtml = '';
+    for (const [subj, info] of Object.entries(subjects)) {
+        const disp = classId ? (info.per_class || {})[classId] : info;
+        if (!disp) {
+            bodyHtml += `<tr><td>${subj}</td><td class="text-center">${info.full_score}</td><td colspan="7" class="text-center text-muted">暂无数据</td></tr>`;
+            continue;
+        }
+        bodyHtml += `<tr>
+            <td>${subj}</td>
+            <td class="text-center">${info.full_score}</td>
+            <td class="text-center">${disp.count}</td>
+            <td class="text-center">${disp.mean}</td>
+            <td class="text-center">${disp.std}</td>
+            <td class="text-center">${disp.skewness}</td>
+            <td class="text-center">${disp.kurtosis}</td>
+            <td class="text-center"><span class="badge bg-info">${disp.shape}</span></td>
+            <td><small>${disp.description}</small></td>
+        </tr>`;
+    }
+
+    // 总分行
+    if (totalInfo && totalInfo.shape) {
+        bodyHtml += `<tr class="table-primary">
+            <td><strong>总分</strong></td>
+            <td class="text-center">-</td>
+            <td class="text-center">${totalInfo.count}</td>
+            <td class="text-center">${totalInfo.mean}</td>
+            <td class="text-center">${totalInfo.std}</td>
+            <td class="text-center">${totalInfo.skewness}</td>
+            <td class="text-center">${totalInfo.kurtosis}</td>
+            <td class="text-center"><span class="badge bg-primary">${totalInfo.shape}</span></td>
+            <td><small>${totalInfo.description}</small></td>
+        </tr>`;
+    }
+
+    document.getElementById('shapeBody').innerHTML = bodyHtml;
+}
+
+// 7. 临界生
+function renderCriticalStudents(data) {
+    const card = document.getElementById('section-critical');
+    const subjects = data.subjects || {};
+
+    if (Object.keys(subjects).length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = '';
+
+    let bodyHtml = '';
+    for (const [subj, info] of Object.entries(subjects)) {
+        bodyHtml += `<tr>
+            <td>${subj}</td>
+            <td class="text-center">${info.full_score}</td>
+            <td class="text-center">${info.pass_line}</td>
+            <td class="text-center">${info.lower_bound}-${info.upper_bound}</td>
+            <td class="text-center"><strong>${info.critical_count}</strong></td>
+            <td class="text-center">${info.critical_rate}%</td>
+            <td class="text-center text-danger">${info.below_critical}</td>
+            <td class="text-center text-success">${info.above_critical}</td>
+        </tr>`;
+    }
+    document.getElementById('criticalBody').innerHTML = bodyHtml;
+}
+
+// 导出函数
+function exportCombinationExcel() {
+    if (!currentExamId) return;
+    // 组合总览数据简单，可以直接用通用导出
+    showToast('组合总览导出功能开发中', 'info');
+}
+
+function exportQualityExcel() {
+    if (!currentExamId) return;
+    window.open(`/api/analysis/export-quality/${currentExamId}`, '_blank');
+}
+
+function exportRankExcel() {
+    if (!currentExamId) return;
+    const topN = document.getElementById('topN').value || 30;
+    const bottomN = document.getElementById('bottomN').value || 30;
+    window.open(`/api/analysis/export-rank-distribution/${currentExamId}?top_n=${topN}&bottom_n=${bottomN}`, '_blank');
+}
+
+function exportShapeExcel() {
+    if (!currentExamId) return;
+    window.open(`/api/analysis/export-score-shape/${currentExamId}`, '_blank');
+}
+
+function exportCriticalExcel() {
+    if (!currentExamId) return;
+    window.open(`/api/analysis/export-critical-students/${currentExamId}`, '_blank');
+}
+
+// 页面滚动导航高亮
+function updateActiveNav() {
+    const sections = document.querySelectorAll('[id^="section-"]');
+    const navLinks = document.querySelectorAll('#analysis-nav .nav-link');
+    let current = '';
+
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = section.id;
+        }
+    });
+
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+// 平滑滚动
+document.querySelectorAll('#analysis-nav .nav-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+});
+
+window.addEventListener('scroll', updateActiveNav);
 
 loadExams();
 </script>

@@ -6,34 +6,92 @@
 {% endblock %}
 
 {% block page_actions %}
-<button class="btn btn-warning btn-sm" onclick="doConversion()">
-    <i class="bi bi-arrow-repeat"></i> 执行等级赋分
-</button>
 <a class="btn btn-success btn-sm" id="exportBtn" href="#">
     <i class="bi bi-download"></i> 导出成绩
 </a>
 {% endblock %}
 
 {% block content %}
-<div class="row g-3 mb-4" id="exam-stats"></div>
-
-<div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header"><i class="bi bi-trophy me-2"></i>总分排名</div>
-            <div class="card-body">
-                <div class="table-responsive" style="max-height:400px;overflow:auto;">
-                    <table class="table table-sm table-hover">
-                        <thead class="sticky-top" style="background:#fff;">
-                            <tr><th>排名</th><th>姓名</th><th>总分</th><th>操作</th></tr>
-                        </thead>
-                        <tbody id="rankTable"></tbody>
-                    </table>
-                </div>
+<!-- 考试基本信息 -->
+<div class="card mb-3" id="examInfoCard">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h5 class="mb-1" id="examName"></h5>
+                <span class="text-muted" id="examMeta"></span>
+            </div>
+            <div class="col-md-4 text-end">
+                <span id="calcStatus"></span>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+</div>
+
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4" id="exam-stats"></div>
+
+<!-- 成绩计算结果 -->
+<div class="card mb-4" id="calcResultCard">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-table me-2"></i>成绩计算结果</span>
+        <div class="d-flex align-items-center gap-2">
+            <span id="calcResultCount" class="text-muted small"></span>
+            <div class="btn-group btn-group-sm" id="scoreViewToggle" style="display:none;">
+                <button class="btn btn-primary active" onclick="switchScoreView('raw')" id="btnViewRaw">
+                    <i class="bi bi-file-text"></i> 原始分
+                </button>
+                <button class="btn btn-outline-primary" onclick="switchScoreView('converted')" id="btnViewConverted">
+                    <i class="bi bi-arrow-repeat"></i> 赋分
+                </button>
+            </div>
+            <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-primary btn-sm active" onclick="toggleCalcView('table')" id="btnTableView">
+                    <i class="bi bi-table"></i> 表格
+                </button>
+                <button class="btn btn-outline-primary btn-sm" onclick="toggleCalcView('rank')" id="btnRankView">
+                    <i class="bi bi-trophy"></i> 排名
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <!-- 筛选器 -->
+        <div class="px-3 pt-3" id="filterSection" style="display:none;">
+            <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                    <select id="classFilter" class="form-select form-select-sm" onchange="applyCalcFilters()">
+                        <option value="">全部班级</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="comboFilter" class="form-select form-select-sm" onchange="applyCalcFilters()">
+                        <option value="">全部组合</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <!-- 全量表格视图 -->
+        <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;" id="calcTableView">
+            <table class="table table-sm table-hover table-striped mb-0">
+                <thead class="table-light sticky-top" id="calcTableHead"></thead>
+                <tbody id="calcTableBody"></tbody>
+            </table>
+        </div>
+        <!-- 排名视图（简洁版） -->
+        <div class="table-responsive" style="max-height: 60vh; overflow: auto; display:none;" id="calcRankView">
+            <table class="table table-sm table-hover">
+                <thead class="sticky-top" style="background:#fff;">
+                    <tr><th>排名</th><th>姓名</th><th>班级</th><th>总分</th><th>操作</th></tr>
+                </thead>
+                <tbody id="calcRankBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 分数段分布图 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-12">
         <div class="card">
             <div class="card-header"><i class="bi bi-bar-chart me-2"></i>分数段分布</div>
             <div class="card-body"><div id="chart-distribution" style="height: 350px;"></div></div>
@@ -41,6 +99,7 @@
     </div>
 </div>
 
+<!-- 各科统计 -->
 <div class="card">
     <div class="card-header"><i class="bi bi-book me-2"></i>各科统计</div>
     <div class="card-body">
@@ -60,20 +119,46 @@
 <script>
 const COLORS = ['#4A90D9','#67C23A','#E6A23C','#F56C6C','#909399','#b37feb','#36cfc9','#ff85c0','#ffc53d'];
 const examId = {{ exam_id }};
+const ALL_SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '政治', '历史', '地理'];
+const CONV_SUBJECTS = ['化学', '生物', '政治', '地理'];
+let calcData = null;
+let currentView = 'table';
+let currentScoreView = 'raw';
+let hasConversion = false;
 
 async function loadExamDetail() {
     try {
-        const [exam, overview, totals] = await Promise.all([
+        const results = await Promise.allSettled([
             apiFetch(`/api/exams/${examId}`),
             apiFetch(`/api/analysis/grade/${examId}`),
-            apiFetch(`/api/scores/totals/${examId}`),
+            apiFetch(`/api/exams/${examId}/calc-result`),
         ]);
+
+        const exam = results[0].status === 'fulfilled' ? results[0].value : null;
+        const overview = results[1].status === 'fulfilled' ? results[1].value : null;
+        calcData = results[2].status === 'fulfilled' ? results[2].value : null;
+
+        if (!exam) {
+            showToast('加载考试信息失败', 'error');
+            return;
+        }
 
         document.getElementById('exportBtn').href = `/api/scores/export/${examId}`;
 
+        // 考试基本信息
+        document.getElementById('examName').textContent = exam.name;
+        document.getElementById('examMeta').innerHTML = `
+            <i class="bi bi-calendar me-1"></i>${exam.exam_date}
+            <span class="mx-2">|</span>
+            <i class="bi bi-tag me-1"></i>${exam.exam_type}
+            <span class="mx-2">|</span>
+            <i class="bi bi-people me-1"></i>${exam.exam_target}
+            ${exam.post_split ? '<span class="mx-2">|</span><span class="badge bg-info">分班后</span>' : ''}
+        `;
+
         // 统计卡片
         const statsDiv = document.getElementById('exam-stats');
-        if (overview.total && overview.total.count > 0) {
+        if (overview && overview.total && overview.total.count > 0) {
             const t = overview.total;
             statsDiv.innerHTML = `
                 <div class="col-md-3">
@@ -103,32 +188,46 @@ async function loadExamDetail() {
                         <div class="stat-value">${t.min}</div>
                         <div class="stat-label">最低总分</div>
                     </div>
-                </div>
-            `;
+                </div>`;
+        } else {
+            statsDiv.innerHTML = '<div class="col-12"><div class="alert alert-info mb-0">暂无成绩数据，请先录入成绩并进行成绩计算</div></div>';
         }
 
-        // 排名表
-        document.getElementById('rankTable').innerHTML = totals.slice(0, 100).map(t => `
-            <tr>
-                <td>${t.rank}</td><td>${t.student_name}</td><td><strong>${t.total}</strong></td>
-                <td><a href="/students/${t.student_id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a></td>
-            </tr>
-        `).join('');
+        // 成绩计算结果
+        if (calcData && calcData.students && calcData.students.length > 0) {
+            hasConversion = calcData.use_conversion && calcData.students.some(s => s.conversion_details && Object.keys(s.conversion_details).length > 0);
+            renderCalcResult(calcData);
+            document.getElementById('calcResultCard').style.display = '';
+            document.getElementById('filterSection').style.display = '';
+            if (hasConversion) {
+                document.getElementById('scoreViewToggle').style.display = '';
+            }
+        } else {
+            document.getElementById('calcResultCard').style.display = 'none';
+        }
 
         // 各科统计表
-        const subjects = overview.subjects || {};
-        document.getElementById('subjectTable').innerHTML = Object.values(subjects).map(s => `
-            <tr>
-                <td>${s.subject}</td><td>${s.full_score}</td><td>${s.average}</td>
-                <td>${s.max}</td><td>${s.min}</td><td>${s.pass_rate}%</td><td>${s.excellent_rate}%</td>
-            </tr>
-        `).join('');
+        if (overview) {
+            const subjects = overview.subjects || {};
+            const subjectValues = Object.values(subjects);
+            if (subjectValues.length > 0) {
+                document.getElementById('subjectTable').innerHTML = subjectValues.map(s => `
+                    <tr>
+                        <td>${s.subject}</td><td>${s.full_score}</td><td>${s.average}</td>
+                        <td>${s.max}</td><td>${s.min}</td><td>${s.pass_rate}%</td><td>${s.excellent_rate}%</td>
+                    </tr>
+                `).join('');
+            } else {
+                document.getElementById('subjectTable').innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无统计数据</td></tr>';
+            }
+        }
 
         // 分数段分布图
-        if (totals.length > 0) {
+        if (calcData && calcData.students && calcData.students.length > 0) {
+            const totals = calcData.students.map(s => s.raw_total).filter(t => t > 0);
             const bins = {};
             totals.forEach(t => {
-                const bin = Math.floor(t.total / 50) * 50;
+                const bin = Math.floor(t / 50) * 50;
                 bins[bin] = (bins[bin] || 0) + 1;
             });
             const sortedBins = Object.keys(bins).sort((a, b) => a - b);
@@ -145,14 +244,135 @@ async function loadExamDetail() {
     } catch (e) { showToast('加载考试详情失败: ' + e.message, 'error'); }
 }
 
-async function doConversion() {
-    if (!confirmDelete('将对所有赋分科目（化学、生物、政治、地理）执行等级赋分计算，确定？')) return;
-    try {
-        const result = await apiFetch(`/api/scores/convert-all/${examId}`, { method: 'POST' });
-        const total = Object.values(result).reduce((a, b) => a + b, 0);
-        showToast(`赋分完成，共处理 ${total} 条记录`, 'success');
-        loadExamDetail();
-    } catch (e) { showToast('赋分失败: ' + e.message, 'error'); }
+function switchScoreView(view) {
+    currentScoreView = view;
+    document.getElementById('btnViewRaw').className = view === 'raw' ? 'btn btn-primary active' : 'btn btn-outline-primary';
+    document.getElementById('btnViewConverted').className = view === 'converted' ? 'btn btn-primary active' : 'btn btn-outline-primary';
+    applyCalcFilters();
+}
+
+function renderCalcResult(data) {
+    const students = data.students || [];
+
+    // 构建筛选器
+    const classSet = new Set();
+    const comboSet = new Set();
+    students.forEach(s => {
+        classSet.add(s.class_name);
+        if (s.combination) comboSet.add(s.combination);
+    });
+    const classSel = document.getElementById('classFilter');
+    classSel.innerHTML = '<option value="">全部班级</option>';
+    [...classSet].sort().forEach(c => { classSel.innerHTML += `<option value="${c}">${c}</option>`; });
+    const comboSel = document.getElementById('comboFilter');
+    comboSel.innerHTML = '<option value="">全部组合</option>';
+    [...comboSet].sort().forEach(c => { comboSel.innerHTML += `<option value="${c}">${c}</option>`; });
+
+    renderCalcTable(students);
+    renderCalcRank(students);
+    document.getElementById('calcResultCount').textContent = `共 ${students.length} 名学生`;
+}
+
+function applyCalcFilters() {
+    if (!calcData) return;
+    const classFilter = document.getElementById('classFilter').value;
+    const comboFilter = document.getElementById('comboFilter').value;
+    let filtered = calcData.students;
+    if (classFilter) filtered = filtered.filter(s => s.class_name === classFilter);
+    if (comboFilter) filtered = filtered.filter(s => s.combination === comboFilter);
+    renderCalcTable(filtered);
+    renderCalcRank(filtered);
+    document.getElementById('calcResultCount').textContent = `共 ${filtered.length} 名学生`;
+}
+
+function renderCalcTable(students) {
+    const view = currentScoreView;
+    const useConv = view === 'converted' && hasConversion;
+
+    // 表头
+    let headHtml = '<tr><th>排名</th><th>学号</th><th>姓名</th><th>班级</th><th>组合</th>';
+    if (useConv) {
+        ALL_SUBJECTS.forEach(subj => {
+            headHtml += CONV_SUBJECTS.includes(subj) ? `<th class="table-info">${subj}(赋分)</th>` : `<th>${subj}</th>`;
+        });
+        headHtml += '<th class="table-success">赋分总分</th><th class="table-success">班级排名</th><th class="table-success">组合排名</th>';
+    } else {
+        ALL_SUBJECTS.forEach(subj => { headHtml += `<th>${subj}</th>`; });
+        headHtml += '<th class="table-primary">原始总分</th><th class="table-primary">班级排名</th><th class="table-primary">组合排名</th>';
+    }
+    headHtml += '</tr>';
+    document.getElementById('calcTableHead').innerHTML = headHtml;
+
+    const sortField = useConv ? 'converted_total' : 'raw_total';
+    const sorted = [...students].sort((a, b) => (b[sortField] || 0) - (a[sortField] || 0));
+
+    let bodyHtml = '';
+    sorted.forEach((s, idx) => {
+        bodyHtml += '<tr>';
+        bodyHtml += `<td>${idx + 1}</td>`;
+        bodyHtml += `<td>${s.student_no}</td><td>${s.student_name}</td><td>${s.class_name}</td><td>${s.combination || '-'}</td>`;
+        if (useConv) {
+            ALL_SUBJECTS.forEach(subj => {
+                if (CONV_SUBJECTS.includes(subj) && s.conversion_details && s.conversion_details[subj]) {
+                    const d = s.conversion_details[subj];
+                    bodyHtml += `<td class="table-info"><span class="badge bg-${tierBadgeColor(d.tier)}">${d.tier}</span> ${d.converted}</td>`;
+                } else {
+                    const val = s.raw_scores[subj];
+                    bodyHtml += `<td>${val != null ? val : '-'}</td>`;
+                }
+            });
+            bodyHtml += `<td class="fw-bold table-success">${s.converted_total || '-'}</td>`;
+            bodyHtml += `<td class="table-success">${s.converted_class_rank || '-'}</td>`;
+            bodyHtml += `<td class="table-success">${s.converted_combination_rank || '-'}</td>`;
+        } else {
+            ALL_SUBJECTS.forEach(subj => {
+                const val = s.raw_scores[subj];
+                bodyHtml += `<td>${val != null ? val : '-'}</td>`;
+            });
+            bodyHtml += `<td class="fw-bold table-primary">${s.raw_total}</td>`;
+            bodyHtml += `<td class="table-primary">${s.class_rank || '-'}</td>`;
+            bodyHtml += `<td class="table-primary">${s.combination_rank || '-'}</td>`;
+        }
+        bodyHtml += '</tr>';
+    });
+    document.getElementById('calcTableBody').innerHTML = bodyHtml;
+}
+
+function renderCalcRank(students) {
+    const useConv = currentScoreView === 'converted' && hasConversion;
+    const sortField = useConv ? 'converted_total' : 'raw_total';
+    const sorted = [...students].sort((a, b) => (b[sortField] || 0) - (a[sortField] || 0));
+    const label = useConv ? '赋分总分' : '原始总分';
+    document.getElementById('calcRankBody').innerHTML = sorted.map((t, idx) => `
+        <tr>
+            <td>${idx + 1}</td>
+            <td>${t.student_name}</td>
+            <td>${t.class_name}</td>
+            <td><strong>${t[sortField] || '-'}</strong></td>
+            <td><a href="/students/${t.student_id}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye"></i></a></td>
+        </tr>
+    `).join('');
+}
+
+function toggleCalcView(view) {
+    currentView = view;
+    if (view === 'table') {
+        document.getElementById('calcTableView').style.display = '';
+        document.getElementById('calcRankView').style.display = 'none';
+        document.getElementById('btnTableView').classList.add('active');
+        document.getElementById('btnRankView').classList.remove('active');
+    } else {
+        document.getElementById('calcTableView').style.display = 'none';
+        document.getElementById('calcRankView').style.display = '';
+        document.getElementById('btnTableView').classList.remove('active');
+        document.getElementById('btnRankView').classList.add('active');
+    }
+}
+
+function tierBadgeColor(tier) {
+    if (!tier) return 'secondary';
+    const c = tier.charAt(0);
+    return {A:'primary', B:'success', C:'warning text-dark', D:'', E:'danger'}[c] || 'secondary';
 }
 
 loadExamDetail();

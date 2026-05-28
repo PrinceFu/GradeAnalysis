@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}纵向追踪{% endblock %}
-{% block breadcrumb %}<li class="breadcrumb-item active">纵向追踪</li>{% endblock %}
+{% block title %}个人追踪分析{% endblock %}
+{% block breadcrumb %}<li class="breadcrumb-item active">个人追踪分析</li>{% endblock %}
 
 {% block content %}
 <div class="card mb-4">
@@ -56,10 +56,10 @@ async function loadStudents() {
     const classId = document.getElementById('classSelect').value;
     if (!classId) return;
     try {
-        const students = await apiFetch(`/api/students/?class_id=${classId}`);
+        const resp = await apiFetch(`/api/students/?class_id=${classId}`);
         const select = document.getElementById('studentSelect');
         select.innerHTML = '<option value="">请选择学生</option>';
-        students.forEach(s => select.innerHTML += `<option value="${s.id}">${s.name} (${s.student_no})</option>`);
+        (resp.items || resp).forEach(s => select.innerHTML += `<option value="${s.id}">${s.name} (${s.student_no})</option>`);
     } catch (e) { showToast('加载学生列表失败: ' + e.message, 'error'); }
 }
 

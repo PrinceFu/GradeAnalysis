@@ -86,3 +86,49 @@ function formatScore(score) {
 function formatPercent(value) {
     return Number(value).toFixed(1) + '%';
 }
+
+// ============ 侧边栏考试选择功能 ============
+
+// 加载考试列表到侧边栏
+async function loadSidebarExams() {
+    const select = document.getElementById('sidebarExamSelect');
+    if (!select) return;
+    try {
+        const exams = await apiFetch('/api/exams/');
+        exams.forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.id;
+            opt.textContent = e.name;
+            select.appendChild(opt);
+        });
+        // 恢复之前选择的考试
+        const savedExamId = sessionStorage.getItem('selectedExamId');
+        if (savedExamId) {
+            select.value = savedExamId;
+        }
+    } catch (e) {
+        console.error('加载考试列表失败:', e);
+    }
+}
+
+// 侧边栏考试选择变化
+function onSidebarExamChange(examId) {
+    if (examId) {
+        sessionStorage.setItem('selectedExamId', examId);
+    } else {
+        sessionStorage.removeItem('selectedExamId');
+    }
+}
+
+// 导航到分析页面
+function navigateToAnalysis(type) {
+    const examId = sessionStorage.getItem('selectedExamId');
+    if (!examId) {
+        showToast('请先选择考试', 'warning');
+        return;
+    }
+    window.location.href = `/analysis/single/${type}?exam_id=${examId}`;
+}
+
+// 页面加载时自动加载侧边栏考试列表
+document.addEventListener('DOMContentLoaded', loadSidebarExams);

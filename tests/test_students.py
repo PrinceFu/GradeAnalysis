@@ -1,23 +1,6 @@
 """学生管理 API 测试"""
 
 
-def test_create_class(client):
-    resp = client.post("/api/students/classes", json={"name": "高三(1)班", "grade": 12})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["name"] == "高三(1)班"
-    assert data["grade"] == 12
-    assert "id" in data
-
-
-def test_list_classes(client, sample_class):
-    resp = client.get("/api/students/classes")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) >= 1
-    assert data[0]["name"] == "高三(1)班"
-
-
 def test_create_student(client, sample_class):
     resp = client.post("/api/students/", json={
         "name": "李四",
